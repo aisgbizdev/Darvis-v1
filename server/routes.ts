@@ -14,6 +14,27 @@ const SOLID_GROUP_KEYWORDS = [
   "legalitas", "pt "
 ];
 
+const AISG_KEYWORDS = [
+  "audit", "evaluasi", "evaluasi kinerja",
+  "kinerja", "performa", "performance",
+  "cabang", "tim", "divisi", "departemen",
+  "peran", "posisi", "jabatan", "job desc",
+  "overload", "beban kerja",
+  "disiplin", "konsistensi",
+  "integritas",
+  "early warning", "ews",
+  "governance", "tata kelola",
+  "kepatuhan", "compliance",
+  "pilar", "prodem",
+  "rotasi", "mutasi",
+  "sop", "prosedur",
+  "risiko organisasi", "risiko sistem",
+  "struktur organisasi",
+  "penilaian", "assessment",
+  "kesesuaian", "fit and proper",
+  "aisg"
+];
+
 const BIAS_KEYWORDS = [
   "ragu", "bingung", "takut",
   "fomo", "impulsif",
@@ -87,6 +108,29 @@ function detectBiasIntent(message: string): boolean {
   return false;
 }
 
+function detectAiSGIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+
+  if (AISG_KEYWORDS.some((kw) => lower.includes(kw))) {
+    return true;
+  }
+
+  const aisgPatterns = [
+    /evaluasi\s+(kinerja|cabang|tim|individu|peran)/i,
+    /audit\s+(internal|cabang|tim|individu|sistem|organisasi)/i,
+    /beban\s+(kerja|tugas)\s+(berat|berlebih|terlalu)/i,
+    /(tidak|nggak?|gak?)\s+(sesuai|cocok)\s+(peran|posisi|jabatan)/i,
+    /early\s+warning/i,
+    /tata\s+kelola/i,
+    /fit\s+and\s+proper/i,
+    /struktur\s+(organisasi|tim|cabang)/i,
+    /pola\s+(kerja|perilaku|kinerja)/i,
+    /indikator\s+(kinerja|risiko|peringatan)/i,
+  ];
+
+  return aisgPatterns.some((p) => p.test(lower));
+}
+
 function enforceFormat(reply: string): string {
   const hasBroto = /Broto\s*:/i.test(reply);
   const hasRara = /Rara\s*:/i.test(reply);
@@ -132,12 +176,21 @@ export async function registerRoutes(
 
       const isBias = detectBiasIntent(message);
       const isSolidGroup = detectSolidGroupIntent(message);
+      const isAiSG = detectAiSGIntent(message);
 
       if (isBias) {
         const biasPrompt = readPromptFile("DARVIS_NODE_BIAS.md");
         if (biasPrompt) {
           systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_BIAS (PRIORITAS UTAMA)\n\n${biasPrompt}`;
           nodesUsed.push("NODE_BIAS");
+        }
+      }
+
+      if (isAiSG) {
+        const aisgPrompt = readPromptFile("DARVIS_NODE_AiSG.md");
+        if (aisgPrompt) {
+          systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_AiSG\n\n${aisgPrompt}`;
+          nodesUsed.push("NODE_AiSG");
         }
       }
 
@@ -150,7 +203,11 @@ export async function registerRoutes(
       }
 
       if (nodesUsed.length > 1) {
-        systemContent += `\n\n---\nINSTRUKSI MULTI-NODE:\nLebih dari satu node terdeteksi (${nodesUsed.join(", ")}). PRIORITASKAN NODE_BIAS untuk refleksi awal. Turunkan klaim — jangan memberi advice, jangan memberi instruksi. Fokus pada kondisi manusia di balik pertanyaan ini terlebih dahulu, baru sentuh konteks domain lain secara ringan.`;
+        const hasBiasNode = nodesUsed.includes("NODE_BIAS");
+        const multiNodeInstruction = hasBiasNode
+          ? `PRIORITASKAN NODE_BIAS untuk refleksi awal. Turunkan klaim — jangan memberi advice, jangan memberi instruksi. Fokus pada kondisi manusia di balik pertanyaan ini terlebih dahulu, baru sentuh konteks domain lain secara ringan.`
+          : `Lebih dari satu konteks domain terdeteksi. Turunkan klaim dan gunakan bahasa reflektif. Jangan memberi penilaian final atau keputusan. Bantu user melihat dari berbagai sudut pandang.`;
+        systemContent += `\n\n---\nINSTRUKSI MULTI-NODE:\nNode aktif: ${nodesUsed.join(", ")}. ${multiNodeInstruction}`;
       }
 
       messages.push({ role: "system", content: systemContent });

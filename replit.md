@@ -16,12 +16,14 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - `prompts/DARVIS_CORE.md` - Core system prompt (dual-persona rules)
 - `prompts/DARVIS_NODE_SolidGroup.md` - Solid Group context node
 - `prompts/DARVIS_NODE_BIAS.md` - Behavioral bias & emotional context node
+- `prompts/DARVIS_NODE_AiSG.md` - Audit intelligence & governance context node
 
 ## Features
 - Single-page minimalist chat UI
 - Dual-persona output: Broto (logical) & Rara (reflective)
 - Intent detection for Solid Group topics (keywords: solid, rfb, bpf, kpf, ewf, sgb, etc.)
 - Intent detection for behavioral/emotional bias (keywords: ragu, fomo, burnout, stres, overconfidence, etc. + NLP regex patterns)
+- Intent detection for audit/governance (keywords: audit, evaluasi, kinerja, cabang, governance, ews, etc. + NLP regex patterns)
 - Multi-node support: NODE_BIAS prioritized for refleksi awal when multiple nodes detected
 - Fallback: if uncertain, NODE_BIAS activated (broad keyword + pattern matching)
 - localStorage chat history with 10-message context window
@@ -32,11 +34,14 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 ## Node System
 - **NODE_SOLIDGROUP**: Solid Group business context (triggered by company/product keywords)
 - **NODE_BIAS**: Behavioral intelligence & human risk (triggered by emotional/bias keywords + regex patterns)
+- **NODE_AiSG**: Audit intelligence & governance (triggered by audit/evaluasi/kinerja/governance keywords + regex patterns)
 - Priority: NODE_BIAS > other nodes when multiple detected (refleksi awal, turunkan klaim)
+- Multi-node without BIAS: turunkan klaim, bahasa reflektif, no penilaian final
 
 ## Environment
 - `OPENAI_API_KEY` - Required, stored in Replit Secrets
 
 ## Recent Changes
+- 2026-02-10: Added NODE_AiSG support with audit/governance keyword + NLP detection, multi-node logic
 - 2026-02-10: Added NODE_BIAS support with keyword + NLP pattern detection, multi-node priority
 - 2026-02-10: Initial v0.1 implementation
