@@ -14,6 +14,29 @@ const SOLID_GROUP_KEYWORDS = [
   "legalitas", "pt "
 ];
 
+const NM_KEYWORDS = [
+  "harga", "price",
+  "emas", "gold", "xau", "xauusd",
+  "oil", "minyak", "energy", "energi", "crude",
+  "market", "pasar", "bursa",
+  "inflasi", "inflation",
+  "suku bunga", "interest rate",
+  "the fed", "federal reserve", "bank sentral", "bank indonesia",
+  "data ekonomi", "news", "outlook",
+  "indeks", "index", "ihsg", "dow jones", "nasdaq", "s&p",
+  "forex", "valas", "kurs", "dollar", "dolar",
+  "commodity", "komoditas",
+  "obligasi", "bond", "yield",
+  "gdp", "pdb",
+  "nonfarm", "nfp", "cpi", "ppi",
+  "rally", "bearish", "bullish", "sideways",
+  "resistance", "support", "breakout",
+  "sentimen", "sentiment",
+  "resesi", "recession",
+  "tapering", "quantitative",
+  "trading", "investasi"
+];
+
 const AISG_KEYWORDS = [
   "audit", "evaluasi", "evaluasi kinerja",
   "kinerja", "performa", "performance",
@@ -131,6 +154,31 @@ function detectAiSGIntent(message: string): boolean {
   return aisgPatterns.some((p) => p.test(lower));
 }
 
+function detectNMIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+
+  if (NM_KEYWORDS.some((kw) => lower.includes(kw))) {
+    return true;
+  }
+
+  const nmPatterns = [
+    /harga\s+(emas|gold|minyak|oil|saham)/i,
+    /kondisi\s+(pasar|market|ekonomi)/i,
+    /data\s+(ekonomi|makro|market)/i,
+    /suku\s+bunga/i,
+    /bank\s+(sentral|indonesia|central)/i,
+    /the\s+fed/i,
+    /berapa\s+(harga|kurs|nilai)/i,
+    /naik\s+(turun|drastis|tajam|signifikan)/i,
+    /turun\s+(drastis|tajam|signifikan|terus)/i,
+    /pasar\s+(global|domestik|keuangan|modal)/i,
+    /analisis?\s+(teknikal|fundamental|market|pasar)/i,
+    /tren\s+(pasar|market|harga|ekonomi)/i,
+  ];
+
+  return nmPatterns.some((p) => p.test(lower));
+}
+
 function enforceFormat(reply: string): string {
   const hasBroto = /Broto\s*:/i.test(reply);
   const hasRara = /Rara\s*:/i.test(reply);
@@ -177,12 +225,21 @@ export async function registerRoutes(
       const isBias = detectBiasIntent(message);
       const isSolidGroup = detectSolidGroupIntent(message);
       const isAiSG = detectAiSGIntent(message);
+      const isNM = detectNMIntent(message);
 
       if (isBias) {
         const biasPrompt = readPromptFile("DARVIS_NODE_BIAS.md");
         if (biasPrompt) {
           systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_BIAS (PRIORITAS UTAMA)\n\n${biasPrompt}`;
           nodesUsed.push("NODE_BIAS");
+        }
+      }
+
+      if (isNM) {
+        const nmPrompt = readPromptFile("DARVIS_NODE_NM.md");
+        if (nmPrompt) {
+          systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_NM\n\n${nmPrompt}`;
+          nodesUsed.push("NODE_NM");
         }
       }
 
