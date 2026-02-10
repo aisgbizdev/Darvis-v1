@@ -4,8 +4,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2, Brain } from "lucide-react";
-import type { ChatMessage, ChatResponse, HistoryResponse } from "@shared/schema";
+import { Send, Trash2, Loader2, Brain, Lightbulb, X } from "lucide-react";
+import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse } from "@shared/schema";
 
 function parseDualVoice(text: string) {
   const brotoMatch = text.match(/Broto:\s*([\s\S]*?)(?=\n\s*Rara:|$)/i);
@@ -78,14 +78,29 @@ function TypingIndicator() {
   );
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  gaya_berpikir: "Gaya Berpikir",
+  preferensi_komunikasi: "Preferensi Komunikasi",
+  konteks_bisnis: "Konteks Bisnis",
+  pola_keputusan: "Pola Keputusan",
+  area_fokus: "Area Fokus",
+  koreksi_penting: "Koreksi Penting",
+};
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [showPrefs, setShowPrefs] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
     queryKey: ["/api/history"],
+  });
+
+  const { data: prefsData } = useQuery<PreferencesResponse>({
+    queryKey: ["/api/preferences"],
+    refetchInterval: 30000,
   });
 
   useEffect(() => {
@@ -140,6 +155,7 @@ export default function ChatPage() {
     onSuccess: () => {
       setMessages([]);
       queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/preferences"] });
       inputRef.current?.focus();
     },
   });
@@ -174,17 +190,71 @@ export default function ChatPage() {
             <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">DiAn Raha Vision v0.1</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => clearMutation.mutate()}
-          disabled={messages.length === 0 || clearMutation.isPending}
-          data-testid="button-clear-chat"
-        >
-          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-          Clear
-        </Button>
+        <div className="flex items-center gap-1 flex-wrap">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowPrefs(!showPrefs)}
+            className={`toggle-elevate ${showPrefs ? "toggle-elevated" : ""}`}
+            data-testid="button-show-preferences"
+          >
+            <Lightbulb className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => clearMutation.mutate()}
+            disabled={messages.length === 0 || clearMutation.isPending}
+            data-testid="button-clear-chat"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+            Clear
+          </Button>
+        </div>
       </header>
+
+      {showPrefs && (
+        <div className="border-b px-4 py-3 bg-card/50 max-h-[40vh] overflow-y-auto" data-testid="panel-preferences">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold" data-testid="text-prefs-title">Yang DARVIS Pelajari</h3>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowPrefs(false)} data-testid="button-close-preferences">
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            {(!prefsData?.preferences || prefsData.preferences.length === 0) ? (
+              <p className="text-xs text-muted-foreground py-2" data-testid="text-prefs-empty">
+                Belum ada insight yang dipelajari. DARVIS akan mulai belajar setelah beberapa percakapan.
+              </p>
+            ) : (
+              <div className="space-y-2" data-testid="container-prefs-list">
+                {Object.entries(
+                  prefsData.preferences.reduce<Record<string, typeof prefsData.preferences>>((acc, p) => {
+                    if (!acc[p.category]) acc[p.category] = [];
+                    acc[p.category].push(p);
+                    return acc;
+                  }, {})
+                ).map(([category, items]) => (
+                  <div key={category} data-testid={`prefs-group-${category}`}>
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                      {CATEGORY_LABELS[category] || category}
+                    </p>
+                    {items.map((item) => (
+                      <div key={item.id} className="flex items-start gap-2 py-1" data-testid={`pref-item-${item.id}`}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-1.5 shrink-0" />
+                        <p className="text-xs leading-relaxed">{item.insight}</p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4" ref={scrollRef} data-testid="container-messages">
         <div className="py-4 space-y-3 max-w-2xl mx-auto">

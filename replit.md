@@ -31,8 +31,11 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - Intent detection for risk education (keywords: risiko, martingale, leverage, margin, drawdown, loss, money management, etc. + NLP regex patterns)
 - Multi-node support: NODE_BIAS prioritized for refleksi awal when multiple nodes detected
 - Fallback: if ragu market vs risiko, prioritaskan NODE_RISK_GUARD
-- localStorage chat history with 10-message context window
-- Clear chat functionality
+- Server-side SQLite persistent chat history with 10-message context window + auto-summary
+- Auto-learn system: AI-powered preference extraction every 10 messages
+- Learned preferences injected into system prompt for personalized responses
+- Preferences panel (lightbulb icon) to view what DARVIS has learned
+- Clear chat functionality (also clears learned preferences)
 - Loading state indicator
 - Post-processing to enforce Broto/Rara format
 
@@ -50,7 +53,17 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 ## Environment
 - `OPENAI_API_KEY` - Required, stored in Replit Secrets
 
+## Auto-Learn System
+- **Trigger**: Every 10 messages, AI extracts user preferences from recent conversations
+- **Categories**: gaya_berpikir, preferensi_komunikasi, konteks_bisnis, pola_keputusan, area_fokus, koreksi_penting
+- **Storage**: learned_preferences table in SQLite
+- **Injection**: Preferences injected into system prompt as AUTO-LEARN block
+- **UI**: Lightbulb icon in header → panel showing learned insights grouped by category
+- **Clear**: Clearing chat also clears all learned preferences
+- **Endpoints**: GET /api/preferences (view), POST /api/clear (reset all)
+
 ## Recent Changes
+- 2026-02-10: Added Auto-Learn system with AI-powered preference extraction and injection
 - 2026-02-10: Added NODE_RISK_GUARD support with risk education keyword + NLP detection, fallback priority over NM
 - 2026-02-10: Added NODE_NM support with market/data keyword + NLP detection
 - 2026-02-10: Added NODE_AiSG support with audit/governance keyword + NLP detection, multi-node logic

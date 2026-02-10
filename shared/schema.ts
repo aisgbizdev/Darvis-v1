@@ -20,3 +20,16 @@ export interface ChatResponse {
 export interface HistoryResponse {
   messages: ChatMessage[];
 }
+
+export interface LearnedPreferenceItem {
+  id: number;
+  category: string;
+  insight: string;
+  confidence: number;
+  source_summary: string | null;
+  updated_at: string;
+}
+
+export interface PreferencesResponse {
+  preferences: LearnedPreferenceItem[];
+}

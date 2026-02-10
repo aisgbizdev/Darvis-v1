@@ -25,6 +25,20 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
   CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
+
+  CREATE TABLE IF NOT EXISTS learned_preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'mas_dr',
+    category TEXT NOT NULL,
+    insight TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.7,
+    source_summary TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_learned_prefs_user_id ON learned_preferences(user_id);
+  CREATE INDEX IF NOT EXISTS idx_learned_prefs_category ON learned_preferences(category);
 `);
 
 export function getLastMessages(userId: string, limit: number = 10) {
@@ -88,6 +102,73 @@ export function getAllMessages(userId: string) {
     ORDER BY id ASC
   `);
   return stmt.all(userId) as { role: string; content: string }[];
+}
+
+export interface LearnedPreference {
+  id: number;
+  user_id: string;
+  category: string;
+  insight: string;
+  confidence: number;
+  source_summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getLearnedPreferences(userId: string): LearnedPreference[] {
+  const stmt = db.prepare(`
+    SELECT * FROM learned_preferences
+    WHERE user_id = ?
+    ORDER BY confidence DESC, updated_at DESC
+  `);
+  return stmt.all(userId) as LearnedPreference[];
+}
+
+export function upsertPreference(
+  userId: string,
+  category: string,
+  insight: string,
+  confidence: number,
+  sourceSummary: string | null
+) {
+  const existing = db.prepare(`
+    SELECT id FROM learned_preferences
+    WHERE user_id = ? AND category = ? AND insight = ?
+  `).get(userId, category, insight) as { id: number } | undefined;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE learned_preferences
+      SET confidence = ?, source_summary = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(confidence, sourceSummary, existing.id);
+  } else {
+    db.prepare(`
+      INSERT INTO learned_preferences (user_id, category, insight, confidence, source_summary)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, category, insight, confidence, sourceSummary);
+  }
+}
+
+export function bulkUpsertPreferences(
+  userId: string,
+  preferences: { category: string; insight: string; confidence: number; source_summary: string | null }[]
+) {
+  const transaction = db.transaction(() => {
+    for (const pref of preferences) {
+      upsertPreference(userId, pref.category, pref.insight, pref.confidence, pref.source_summary);
+    }
+  });
+  transaction();
+}
+
+export function clearPreferences(userId: string) {
+  db.prepare(`DELETE FROM learned_preferences WHERE user_id = ?`).run(userId);
+}
+
+export function getPreferenceCount(userId: string): number {
+  const row = db.prepare(`SELECT COUNT(*) as count FROM learned_preferences WHERE user_id = ?`).get(userId) as { count: number };
+  return row.count;
 }
 
 export default db;

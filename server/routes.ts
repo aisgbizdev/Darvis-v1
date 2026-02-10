@@ -12,6 +12,9 @@ import {
   upsertSummary,
   clearHistory,
   getAllMessages,
+  getLearnedPreferences,
+  bulkUpsertPreferences,
+  clearPreferences,
 } from "./db";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -291,9 +294,20 @@ export async function registerRoutes(
   app.post("/api/clear", (_req, res) => {
     try {
       clearHistory(USER_ID);
+      clearPreferences(USER_ID);
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Clear API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/preferences", (_req, res) => {
+    try {
+      const preferences = getLearnedPreferences(USER_ID);
+      return res.json({ preferences });
+    } catch (err: any) {
+      console.error("Preferences API error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -375,6 +389,25 @@ export async function registerRoutes(
         systemContent += `\n\n---\nINSTRUKSI MULTI-NODE:\nNode aktif: ${nodesUsed.join(", ")}. ${multiNodeInstruction}`;
       }
 
+      const learnedPrefs = getLearnedPreferences(USER_ID);
+      if (learnedPrefs.length > 0) {
+        const grouped: Record<string, string[]> = {};
+        for (const pref of learnedPrefs) {
+          if (!grouped[pref.category]) grouped[pref.category] = [];
+          grouped[pref.category].push(pref.insight);
+        }
+        let prefBlock = "\n\n---\nAUTO-LEARN: PROFIL & PREFERENSI MAS DR\nBerikut adalah hal-hal yang sudah DARVIS pelajari dari percakapan sebelumnya. Gunakan insight ini untuk memberikan respons yang lebih personal dan relevan:\n\n";
+        for (const [cat, insights] of Object.entries(grouped)) {
+          prefBlock += `[${cat}]\n`;
+          for (const ins of insights) {
+            prefBlock += `- ${ins}\n`;
+          }
+          prefBlock += "\n";
+        }
+        prefBlock += "Catatan: Gunakan profil ini secara natural, jangan sebutkan secara eksplisit bahwa kamu 'sudah belajar' dari percakapan sebelumnya. Integrasikan ke dalam gaya respons.";
+        systemContent += prefBlock;
+      }
+
       const apiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
       apiMessages.push({ role: "system", content: systemContent });
 
@@ -422,6 +455,12 @@ export async function registerRoutes(
         });
       }
 
+      if (msgCount > 0 && msgCount % 10 === 0) {
+        extractPreferences(USER_ID).catch((err) => {
+          console.error("Auto-learn error:", err?.message || err);
+        });
+      }
+
       const nodeUsed = nodesUsed.length > 0 ? nodesUsed.join(", ") : null;
       const response: ChatResponse = { reply, nodeUsed };
       return res.json(response);
@@ -432,6 +471,84 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+async function extractPreferences(userId: string) {
+  const allMessages = getAllMessages(userId);
+  if (allMessages.length < 6) return;
+
+  const last20 = allMessages.slice(-20);
+  const conversationText = last20
+    .map((m) => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`)
+    .join("\n\n");
+
+  const existingPrefs = getLearnedPreferences(userId);
+  const existingContext = existingPrefs.length > 0
+    ? `\nPreferensi yang sudah diketahui sebelumnya:\n${existingPrefs.map(p => `- [${p.category}] ${p.insight}`).join("\n")}\n\nPerbarui atau tambahkan insight baru berdasarkan percakapan terbaru. Jangan duplikasi yang sudah ada kecuali ada perubahan.`
+    : "";
+
+  const prompt = `Kamu adalah DARVIS, asisten berpikir untuk mas DR. Analisis percakapan berikut dan ekstrak insight tentang profil, preferensi, dan pola berpikir mas DR.
+${existingContext}
+Percakapan terbaru:
+${conversationText}
+
+Ekstrak insight dalam format JSON array. Setiap insight harus memiliki:
+- category: salah satu dari "gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting"
+- insight: deskripsi singkat (1-2 kalimat) dalam bahasa Indonesia
+- confidence: angka 0.5-1.0 (seberapa yakin insight ini valid)
+- source_summary: ringkasan singkat bukti dari percakapan
+
+RULES:
+- Hanya ekstrak insight yang jelas terlihat dari percakapan, jangan berasumsi
+- "koreksi_penting" = hal yang user koreksi atau tidak setuju, ini PALING PENTING untuk dipelajari
+- "gaya_berpikir" = cara user mendekati masalah (analitis, intuitif, hati-hati, dll)
+- "preferensi_komunikasi" = gaya komunikasi yang disukai (ringkas, detail, formal, santai)
+- "konteks_bisnis" = informasi tentang bisnis, peran, industri, prioritas user
+- "pola_keputusan" = bagaimana user biasa membuat keputusan
+- "area_fokus" = topik yang sering dibahas atau dipentingkan
+- Maksimal 8 insight per ekstraksi
+- Jika tidak ada insight baru yang jelas, kembalikan array kosong []
+
+Respond ONLY with valid JSON array, no other text.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [{ role: "user", content: prompt }],
+      max_completion_tokens: 2048,
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) return;
+
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+    const validCategories = ["gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting"];
+    const validPrefs = parsed
+      .filter((p: any) =>
+        p.category && validCategories.includes(p.category) &&
+        p.insight && typeof p.insight === "string" &&
+        typeof p.confidence === "number" && p.confidence >= 0.5 && p.confidence <= 1.0
+      )
+      .slice(0, 8)
+      .map((p: any) => ({
+        category: p.category as string,
+        insight: p.insight as string,
+        confidence: p.confidence as number,
+        source_summary: (p.source_summary as string) || null,
+      }));
+
+    if (validPrefs.length > 0) {
+      bulkUpsertPreferences(userId, validPrefs);
+      console.log(`Auto-learn: extracted ${validPrefs.length} preferences for ${userId}`);
+    }
+  } catch (err: any) {
+    console.error("Preference extraction failed:", err?.message || err);
+  }
 }
 
 async function generateSummary(userId: string) {
