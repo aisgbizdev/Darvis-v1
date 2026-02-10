@@ -1,9 +1,18 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { chatRequestSchema, type ChatResponse } from "@shared/schema";
+import { chatRequestSchema, type ChatResponse, type HistoryResponse } from "@shared/schema";
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
+import {
+  getLastMessages,
+  getSummary,
+  saveMessage,
+  getMessageCount,
+  upsertSummary,
+  clearHistory,
+  getAllMessages,
+} from "./db";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -261,6 +270,34 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const USER_ID = "mas_dr";
+
+  app.get("/api/history", (_req, res) => {
+    try {
+      const msgs = getAllMessages(USER_ID);
+      const response: HistoryResponse = {
+        messages: msgs.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      };
+      return res.json(response);
+    } catch (err: any) {
+      console.error("History API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/clear", (_req, res) => {
+    try {
+      clearHistory(USER_ID);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Clear API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/chat", async (req, res) => {
     try {
       const parsed = chatRequestSchema.safeParse(req.body);
@@ -268,14 +305,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid request body" });
       }
 
-      const { message, history } = parsed.data;
+      const { message } = parsed.data;
 
       const corePrompt = readPromptFile("DARVIS_CORE.md");
       if (!corePrompt) {
         return res.status(500).json({ message: "System prompt not found" });
       }
-
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
       const nodesUsed: string[] = [];
       let systemContent = corePrompt;
@@ -340,39 +375,51 @@ export async function registerRoutes(
         systemContent += `\n\n---\nINSTRUKSI MULTI-NODE:\nNode aktif: ${nodesUsed.join(", ")}. ${multiNodeInstruction}`;
       }
 
-      messages.push({ role: "system", content: systemContent });
+      const apiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+      apiMessages.push({ role: "system", content: systemContent });
 
-      if (history && history.length > 0) {
-        for (const msg of history.slice(-10)) {
-          messages.push({
-            role: msg.role === "user" ? "user" : "assistant",
-            content: msg.content,
-          });
-        }
+      const summary = getSummary(USER_ID);
+      if (summary) {
+        apiMessages.push({
+          role: "system",
+          content: `RINGKASAN PERCAKAPAN SEBELUMNYA:\n${summary}`,
+        });
       }
 
-      const lastInHistory = history?.at(-1);
-      const isLastMessageSameAsInput =
-        lastInHistory?.role === "user" && lastInHistory?.content === message;
-
-      if (!isLastMessageSameAsInput) {
-        messages.push({ role: "user", content: message });
+      const recentMessages = getLastMessages(USER_ID, 10);
+      for (const msg of recentMessages) {
+        apiMessages.push({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.content,
+        });
       }
+
+      apiMessages.push({ role: "user", content: message });
 
       const completion = await openai.chat.completions.create({
         model: "gpt-5",
-        messages,
+        messages: apiMessages,
         max_completion_tokens: 8192,
       });
 
       const choice = completion.choices[0];
       const rawReply = choice?.message?.content || "";
-      
+
       let reply: string;
       if (!rawReply.trim()) {
         reply = "Broto: Maaf mas DR, saya butuh waktu untuk memproses pertanyaan ini. Bisa coba ulangi?\n\nRara: Tenang mas DR, kadang perlu pendekatan berbeda. Coba sampaikan pertanyaan dengan cara lain ya.";
       } else {
         reply = enforceFormat(rawReply);
+      }
+
+      saveMessage(USER_ID, "user", message);
+      saveMessage(USER_ID, "assistant", reply);
+
+      const msgCount = getMessageCount(USER_ID);
+      if (msgCount > 0 && msgCount % 20 === 0) {
+        generateSummary(USER_ID).catch((err) => {
+          console.error("Auto-summary error:", err?.message || err);
+        });
       }
 
       const nodeUsed = nodesUsed.length > 0 ? nodesUsed.join(", ") : null;
@@ -385,4 +432,32 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+async function generateSummary(userId: string) {
+  const allMessages = getAllMessages(userId);
+  if (allMessages.length < 10) return;
+
+  const last30 = allMessages.slice(-30);
+  const conversationText = last30
+    .map((m) => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`)
+    .join("\n\n");
+
+  const existingSummary = getSummary(userId);
+
+  const prompt = existingSummary
+    ? `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nRingkasan sebelumnya:\n${existingSummary}\n\nPercakapan terbaru:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) yang menggabungkan ringkasan sebelumnya dan percakapan terbaru. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`
+    : `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nPercakapan:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) dari percakapan ini. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5",
+    messages: [{ role: "user", content: prompt }],
+    max_completion_tokens: 2048,
+  });
+
+  const summaryText = completion.choices[0]?.message?.content?.trim();
+  if (summaryText) {
+    upsertSummary(userId, summaryText);
+    console.log(`Auto-summary generated for ${userId} (${allMessages.length} messages)`);
+  }
 }

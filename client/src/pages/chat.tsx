@@ -1,25 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Trash2, Loader2, Brain } from "lucide-react";
-import type { ChatMessage, ChatResponse } from "@shared/schema";
-
-const STORAGE_KEY = "darvis_chat_history";
-
-function loadHistory(): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
-}
-
-function saveHistory(messages: ChatMessage[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-}
+import type { ChatMessage, ChatResponse, HistoryResponse } from "@shared/schema";
 
 function parseDualVoice(text: string) {
   const brotoMatch = text.match(/Broto:\s*([\s\S]*?)(?=\n\s*Rara:|$)/i);
@@ -93,10 +79,20 @@ function TypingIndicator() {
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(loadHistory);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
+    queryKey: ["/api/history"],
+  });
+
+  useEffect(() => {
+    if (historyData?.messages) {
+      setMessages(historyData.messages);
+    }
+  }, [historyData]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -108,12 +104,8 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  useEffect(() => {
-    saveHistory(messages);
-  }, [messages]);
-
   const chatMutation = useMutation({
-    mutationFn: async (payload: { message: string; history: ChatMessage[] }) => {
+    mutationFn: async (payload: { message: string }) => {
       const res = await apiRequest("POST", "/api/chat", payload);
       return (await res.json()) as ChatResponse;
     },
@@ -141,17 +133,26 @@ export default function ChatPage() {
     }
   }, [chatMutation.isPending, scrollToBottom]);
 
+  const clearMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/clear");
+    },
+    onSuccess: () => {
+      setMessages([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+      inputRef.current?.focus();
+    },
+  });
+
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || chatMutation.isPending) return;
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
-    const updated = [...messages, userMsg];
-    setMessages(updated);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
 
-    const last10 = updated.slice(-10);
-    chatMutation.mutate({ message: trimmed, history: last10 });
+    chatMutation.mutate({ message: trimmed });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -159,12 +160,6 @@ export default function ChatPage() {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleClear = () => {
-    setMessages([]);
-    localStorage.removeItem(STORAGE_KEY);
-    inputRef.current?.focus();
   };
 
   return (
@@ -182,8 +177,8 @@ export default function ChatPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleClear}
-          disabled={messages.length === 0}
+          onClick={() => clearMutation.mutate()}
+          disabled={messages.length === 0 || clearMutation.isPending}
           data-testid="button-clear-chat"
         >
           <Trash2 className="w-3.5 h-3.5 mr-1.5" />
@@ -193,7 +188,13 @@ export default function ChatPage() {
 
       <div className="flex-1 overflow-y-auto px-4" ref={scrollRef} data-testid="container-messages">
         <div className="py-4 space-y-3 max-w-2xl mx-auto">
-          {messages.length === 0 && (
+          {historyLoading && (
+            <div className="flex items-center justify-center py-16" data-testid="status-loading-history">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!historyLoading && messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-state">
               <div className="w-14 h-14 rounded-md bg-primary/10 flex items-center justify-center mb-4">
                 <Brain className="w-7 h-7 text-primary" />

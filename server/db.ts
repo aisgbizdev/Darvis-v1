@@ -1,0 +1,93 @@
+import Database from "better-sqlite3";
+import path from "path";
+
+const DB_PATH = path.join(process.cwd(), "darvis.db");
+
+const db = new Database(DB_PATH);
+
+db.pragma("journal_mode = WAL");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'mas_dr',
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'mas_dr' UNIQUE,
+    summary TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+  CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
+`);
+
+export function getLastMessages(userId: string, limit: number = 10) {
+  const stmt = db.prepare(`
+    SELECT role, content FROM conversations
+    WHERE user_id = ?
+    ORDER BY id DESC
+    LIMIT ?
+  `);
+  const rows = stmt.all(userId, limit) as { role: string; content: string }[];
+  return rows.reverse();
+}
+
+export function getSummary(userId: string): string | null {
+  const stmt = db.prepare(`
+    SELECT summary FROM summaries WHERE user_id = ?
+  `);
+  const row = stmt.get(userId) as { summary: string } | undefined;
+  return row?.summary || null;
+}
+
+export function saveMessage(userId: string, role: "user" | "assistant", content: string) {
+  const stmt = db.prepare(`
+    INSERT INTO conversations (user_id, role, content) VALUES (?, ?, ?)
+  `);
+  stmt.run(userId, role, content);
+}
+
+export function getMessageCount(userId: string): number {
+  const stmt = db.prepare(`
+    SELECT COUNT(*) as count FROM conversations WHERE user_id = ?
+  `);
+  const row = stmt.get(userId) as { count: number };
+  return row.count;
+}
+
+export function upsertSummary(userId: string, summary: string) {
+  const stmt = db.prepare(`
+    INSERT INTO summaries (user_id, summary, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(user_id)
+    DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at
+  `);
+  stmt.run(userId, summary);
+}
+
+export function clearHistory(userId: string) {
+  const delConv = db.prepare(`DELETE FROM conversations WHERE user_id = ?`);
+  const delSumm = db.prepare(`DELETE FROM summaries WHERE user_id = ?`);
+  const transaction = db.transaction(() => {
+    delConv.run(userId);
+    delSumm.run(userId);
+  });
+  transaction();
+}
+
+export function getAllMessages(userId: string) {
+  const stmt = db.prepare(`
+    SELECT role, content FROM conversations
+    WHERE user_id = ?
+    ORDER BY id ASC
+  `);
+  return stmt.all(userId) as { role: string; content: string }[];
+}
+
+export default db;

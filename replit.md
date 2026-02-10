@@ -7,7 +7,8 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui
 - **Backend**: Express.js with OpenAI API integration
 - **AI Model**: GPT-5 via OpenAI API
-- **State**: localStorage for chat history (no database needed)
+- **State**: Server-side SQLite (better-sqlite3) for persistent chat history + auto-summary
+- **Database**: darvis.db (SQLite, WAL mode)
 
 ## Key Files
 - `client/src/pages/chat.tsx` - Main chat UI page
