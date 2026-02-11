@@ -1,0 +1,142 @@
+# DARVIS – Compliance & Risk Thinking Framework
+_Based on SG Preventive Compliance & Risk Knowledge Core_
+
+---
+
+## 1. Framework Utama Compliance & Risk Assessment
+
+### Nama Framework
+**Preventive Risk-Based Compliance Framework**
+
+### Komponen Utama
+- KYC sebagai fondasi pemahaman nasabah  
+- Prinsip kewajaran (reasonableness)  
+- Pendekatan berbasis risiko (risk-based approach)  
+- Pemantauan pola & tren (bukan transaksi tunggal)  
+- Early warning & eskalasi internal  
+- Komunikasi preventif  
+- Pemisahan peran: Cabang – Kepatuhan – Direksi  
+
+### Cara Kerja
+1. Kenali identitas, profil, sumber dana, tujuan, dan pengalaman nasabah.  
+2. Uji kewajaran aktivitas terhadap profil.  
+3. Pantau pola transaksi dan perilaku.  
+4. Identifikasi sinyal dini sebelum menjadi komplain atau sengketa.  
+5. Eskalasi jika risiko tidak dapat dikelola di level operasional.  
+6. Direksi mengambil keputusan berbasis risiko dan dampak jangka panjang.  
+
+**Prinsip Inti:**  
+Pencegahan lebih awal lebih penting daripada penanganan setelah masalah terjadi.
+
+---
+
+## 2. Kategori Risiko
+
+### Risiko Identitas
+Ketidakjelasan atau inkonsistensi identitas yang dapat memicu sengketa.
+
+### Risiko Profil
+Aktivitas tidak sejalan dengan pekerjaan, sumber dana, atau tujuan awal.
+
+### Risiko Pemahaman Risiko
+Nasabah tidak memahami risiko dan hanya fokus pada hasil.
+
+### Risiko Sumber Dana
+Dana tidak jelas, berubah-ubah, atau tidak konsisten dengan profil.
+
+### Risiko Pola Transaksi
+Top up/withdrawal ekstrem, berulang, atau tanpa tujuan ekonomi jelas.
+
+### Risiko Perilaku
+Tekanan emosional, defensif, tergesa-gesa, meminta jaminan hasil.
+
+### Risiko Komunikasi
+Bahasa yang menimbulkan ekspektasi tidak realistis atau janji implisit.
+
+### Risiko Reputasi
+Pola komplain berulang, cabang menjadi outlier, tren negatif agregat.
+
+### Risiko Tata Kelola
+Tidak ada pencatatan, tidak ada eskalasi, peran tidak dipisahkan dengan jelas.
+
+---
+
+## 3. Red Flags / Early Warning Signs
+
+- Banyak nasabah baru bermasalah dalam waktu singkat  
+- Dana besar masuk pada nasabah pemula  
+- Top up segera setelah kerugian besar  
+- Pola top up dan withdrawal dalam waktu singkat  
+- Perubahan nominal ekstrem tanpa penjelasan  
+- Penolakan memberikan informasi dasar  
+- Permintaan jaminan atau kepastian hasil  
+- Tekanan untuk mempercepat proses  
+- Keluhan kecil yang mulai berulang  
+- Cabang konsisten menjadi outlier  
+
+**Catatan:**  
+Red flag adalah sinyal kewaspadaan, bukan kesimpulan pelanggaran.
+
+---
+
+## 4. Checklist Evaluasi Kepatuhan
+
+- Apakah identitas jelas dan konsisten?  
+- Apakah sumber dana masuk akal secara ekonomi?  
+- Apakah aktivitas sesuai profil dan tujuan awal?  
+- Apakah nasabah benar-benar memahami risiko?  
+- Apakah komunikasi netral dan tidak menjanjikan hasil?  
+- Apakah pola transaksi menunjukkan kewajaran?  
+- Apakah ada perubahan perilaku signifikan?  
+- Apakah pencatatan sudah memadai?  
+- Apakah perlu eskalasi internal?  
+
+**Formula Inti:**  
+Kewajaran + Konsistensi + Dokumentasi + Eskalasi Tepat Waktu
+
+---
+
+## 5. Pola Kesalahan Umum
+
+- Menganggap KYC hanya sebagai administrasi  
+- Fokus pada transaksi tunggal, bukan pola  
+- Mengabaikan sinyal perilaku  
+- Terlalu fokus target jangka pendek  
+- Menunda eskalasi  
+- Menggunakan bahasa persuasif berlebihan  
+- Tidak membaca tren agregat  
+- Menganggap pencegahan sebagai hambatan bisnis  
+
+**Akar Umum Masalah:**  
+Mengabaikan sinyal kecil sampai menjadi masalah besar.
+
+---
+
+## 6. Pertanyaan Reflektif untuk DARVIS
+
+- Apakah ini masuk akal secara ekonomi?  
+- Jika terjadi komplain, apakah dokumentasi cukup?  
+- Apakah keputusan ini didorong target atau kewajaran?  
+- Apakah nasabah memahami risiko atau hanya berharap hasil?  
+- Jika pola ini terjadi pada 10 nasabah, apakah tetap nyaman?  
+- Apakah ada sinyal kecil yang sedang diabaikan?  
+- Apakah perlu sudut pandang Kepatuhan?  
+- Apakah komunikasi bisa ditafsirkan sebagai janji?  
+
+**Pertanyaan Kunci:**  
+> Apakah ini wajar, dan apakah kita siap mempertanggungjawabkannya?
+
+---
+
+## 7. Hubungan Compliance dengan Audit
+
+- Compliance bersifat harian dan preventif  
+- Audit bersifat periodik dan evaluatif  
+- Compliance membangun kontrol dan dokumentasi  
+- Audit menguji efektivitas kontrol tersebut  
+- KYC lemah → APU PPT melemah → risiko temuan audit meningkat  
+- Budaya eskalasi sehat → risiko audit menurun  
+
+**Kesimpulan:**  
+Compliance yang kuat membuat audit menjadi validasi,  
+bukan proses pencarian kesalahan.
