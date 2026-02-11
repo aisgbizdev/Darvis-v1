@@ -340,9 +340,9 @@ export default function ChatPage() {
               </p>
               <div className="flex flex-wrap gap-2 justify-center mt-6">
                 {[
-                  "Gimana cara mas DR biasa ambil keputusan?",
-                  "Bantu gw pikirin strategi ini",
-                  "Gw butuh perspektif yang beda",
+                  "Bantu gw pikirin keputusan ini",
+                  "Sparring soal strategi dong",
+                  "Gw butuh sudut pandang lain",
                 ].map((q, i) => (
                   <button
                     key={q}
