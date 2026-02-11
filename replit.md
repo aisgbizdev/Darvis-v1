@@ -43,6 +43,9 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - Clear chat functionality (also clears learned preferences)
 - Loading state indicator
 - Post-processing to enforce Broto/Rara format
+- Konteks Pengguna: lightweight DR profile in system prompt for instant context
+- Proactive Reflection: Rara/Broto can proactively remind about overload, fatigue, rushed decisions, delegation, recurring patterns
+- Tone Detection: automatic emotional/analytical/evaluative/urgent tone detection → adjusts node activation and Broto/Rara behavior
 
 ## Node System
 - **NODE_SOLIDGROUP**: Solid Group business context (triggered by company/product keywords)
@@ -61,7 +64,7 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 
 ## Auto-Learn System
 - **Trigger**: Every 10 messages, AI extracts user preferences from recent conversations
-- **Categories**: gaya_berpikir, preferensi_komunikasi, konteks_bisnis, pola_keputusan, area_fokus, koreksi_penting
+- **Categories**: gaya_berpikir, preferensi_komunikasi, konteks_bisnis, pola_keputusan, area_fokus, koreksi_penting, gaya_kepemimpinan, pola_stres, area_blind_spot
 - **Storage**: learned_preferences table in SQLite
 - **Injection**: Preferences injected into system prompt as AUTO-LEARN block
 - **UI**: Lightbulb icon in header → panel showing learned insights grouped by category
@@ -69,6 +72,10 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **Endpoints**: GET /api/preferences (view), POST /api/clear (reset all)
 
 ## Recent Changes
+- 2026-02-11: Added Konteks Pengguna section in DARVIS_CORE.md — lightweight user profile for DR (CBD Solid Group, experienced leader, sparring partner expectation)
+- 2026-02-11: Added Proactive Reflection system — Rara/Broto can proactively remind DR about overload, fatigue, rushed decisions, delegation, recurring patterns
+- 2026-02-11: Upgraded Auto-Learn with 3 new categories: gaya_kepemimpinan, pola_stres, area_blind_spot (max 10 insights per extraction)
+- 2026-02-11: Added Tone Detection system — detects emotional, analytical, evaluative, urgent tones → auto-activates relevant nodes and adjusts Broto/Rara behavior
 - 2026-02-11: Added NODE_COMPLIANCE v0.1 with curated knowledge from SG Compliance & Risk Assistant (preventive compliance framework, 9 kategori risiko, red flags, checklist kepatuhan, pertanyaan reflektif)
 - 2026-02-11: Enriched NODE_AiSG v0.2 with curated knowledge from AiSG (18 Pilar framework, zona kinerja, ProDem, Reality Score gap, EWS, SWOT, action plan 30-60-90, coaching knowledge — all framed as reflective tools)
 - 2026-02-11: Enriched NODE_BIAS v0.2 with curated knowledge from BiAS Pro (cognitive bias catalog 23 items, decision frameworks 6 models, teknik debiasing 7 metode, pola emosional, template refleksi, warmth index)

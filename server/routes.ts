@@ -150,6 +150,59 @@ function readPromptFile(filename: string): string {
   }
 }
 
+function detectConversationTone(message: string): { emotional: boolean; analytical: boolean; evaluative: boolean; urgent: boolean } {
+  const lower = message.toLowerCase();
+
+  const emotionalPatterns = [
+    /capek|cape|lelah|burnout|stres|stress|frustasi|frustrasi/i,
+    /galau|bingung|ragu|takut|cemas|gelisah|panik|khawatir/i,
+    /gimana\s+(ya|nih|dong|sih)/i,
+    /gak\s+tau\s+(harus|mau|bisa)/i,
+    /berat\s+banget/i,
+    /pusing|mumet|overwhelm|kewalahan/i,
+    /curhat|cerita|sharing/i,
+    /perasaan|hati|mood|mental/i,
+    /capek\s+(banget|bgt|bat)/i,
+    /gw\s+(capek|cape|lelah|stress|stres)/i,
+    /aku\s+(capek|cape|lelah|stress|stres)/i,
+    /saya\s+(capek|cape|lelah|stress|stres)/i,
+  ];
+
+  const analyticalPatterns = [
+    /berapa\s+(angka|margin|profit|loss|target|lot|persentase)/i,
+    /hitung|kalkulasi|persentase|ratio|perbandingan/i,
+    /analisa\s+(ini|itu|data|angka)/i,
+    /breakdown\s+(angka|data|biaya|margin)/i,
+    /coba\s+(hitung|kalkulasi|bandingkan|analisa)/i,
+  ];
+
+  const evaluativePatterns = [
+    /evaluasi\s+(kinerja|tim|cabang|individu|orang)/i,
+    /audit\s+(internal|cabang|tim)/i,
+    /tim\s+(ini|gw|saya|aku)\s+(gak|tidak|nggak|kurang|lemah)/i,
+    /anak\s+buah|bawahan/i,
+    /promosi|demosi/i,
+    /coaching\s+(ini|dia|tim|orang)/i,
+    /orang\s+ini\s+(gak|tidak|nggak|kurang)/i,
+    /gimana\s+(cara|caranya)\s+(evaluasi|nilai|assess)/i,
+  ];
+
+  const urgentPatterns = [
+    /sekarang|segera|urgent|darurat|cepat|buruan/i,
+    /harus\s+(sekarang|segera|cepat|hari\s+ini)/i,
+    /deadline|tenggat|batas\s+waktu/i,
+    /langsung\s+(eksekusi|jalan|gas|mulai)/i,
+    /gak\s+(bisa|boleh)\s+nunggu/i,
+  ];
+
+  return {
+    emotional: emotionalPatterns.some(p => p.test(lower)),
+    analytical: analyticalPatterns.some(p => p.test(lower)),
+    evaluative: evaluativePatterns.some(p => p.test(lower)),
+    urgent: urgentPatterns.some(p => p.test(lower)),
+  };
+}
+
 function detectSolidGroupIntent(message: string): boolean {
   const lower = message.toLowerCase();
   return SOLID_GROUP_KEYWORDS.some((kw) => lower.includes(kw));
@@ -376,12 +429,22 @@ export async function registerRoutes(
       const nodesUsed: string[] = [];
       let systemContent = corePrompt;
 
-      const isBias = detectBiasIntent(message);
+      const tone = detectConversationTone(message);
+
+      let isBias = detectBiasIntent(message);
       const isSolidGroup = detectSolidGroupIntent(message);
-      const isAiSG = detectAiSGIntent(message);
+      let isAiSG = detectAiSGIntent(message);
       const isNM = detectNMIntent(message);
       const isRiskGuard = detectRiskGuardIntent(message);
       const isCompliance = detectComplianceIntent(message);
+
+      if (tone.emotional && !isBias && !isNM && !isRiskGuard) {
+        isBias = true;
+      }
+
+      if (tone.evaluative && !isAiSG && !isNM && !isRiskGuard && !isCompliance) {
+        isAiSG = true;
+      }
 
       if (isBias) {
         const biasPrompt = readPromptFile("DARVIS_NODE_BIAS.md");
@@ -443,6 +506,24 @@ export async function registerRoutes(
           ? `PRIORITASKAN NODE_BIAS untuk refleksi awal. Turunkan klaim — jangan memberi advice, jangan memberi instruksi. Fokus pada kondisi manusia di balik pertanyaan ini terlebih dahulu, baru sentuh konteks domain lain secara ringan.`
           : `Lebih dari satu konteks domain terdeteksi. Turunkan klaim dan gunakan bahasa reflektif. Jangan memberi penilaian final atau keputusan. Bantu user melihat dari berbagai sudut pandang.`;
         systemContent += `\n\n---\nINSTRUKSI MULTI-NODE:\nNode aktif: ${nodesUsed.join(", ")}. ${multiNodeInstruction}`;
+      }
+
+      const toneSignals: string[] = [];
+      if (tone.emotional) toneSignals.push("emosional/personal");
+      if (tone.analytical) toneSignals.push("analitis/data-driven");
+      if (tone.evaluative) toneSignals.push("evaluatif/menilai orang/tim");
+      if (tone.urgent) toneSignals.push("urgensi tinggi");
+      if (toneSignals.length > 0) {
+        systemContent += `\n\n---\nTONE PERCAKAPAN TERDETEKSI: ${toneSignals.join(", ")}.\n`;
+        if (tone.emotional) {
+          systemContent += `Tone emosional terdeteksi — Rara harus memulai dengan acknowledgment kondisi emosi sebelum masuk ke substansi. Broto boleh tetap logis tapi dengan empati.\n`;
+        }
+        if (tone.urgent) {
+          systemContent += `Tone urgensi terdeteksi — Broto harus bantu pikirkan: apakah urgensi ini nyata atau didorong oleh tekanan? Rara boleh rem sedikit kalau perlu: "Apakah memang harus sekarang, mas DR?"\n`;
+        }
+        if (tone.evaluative) {
+          systemContent += `Tone evaluatif terdeteksi — Broto harus bantu dengan framework berpikir, bukan penilaian langsung. Rara harus ingatkan sisi manusiawi dari orang yang sedang dievaluasi.\n`;
+        }
       }
 
       const learnedPrefs = getLearnedPreferences(USER_ID);
@@ -549,7 +630,7 @@ Percakapan terbaru:
 ${conversationText}
 
 Ekstrak insight dalam format JSON array. Setiap insight harus memiliki:
-- category: salah satu dari "gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting"
+- category: salah satu dari "gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting", "gaya_kepemimpinan", "pola_stres", "area_blind_spot"
 - insight: deskripsi singkat (1-2 kalimat) dalam bahasa Indonesia
 - confidence: angka 0.5-1.0 (seberapa yakin insight ini valid)
 - source_summary: ringkasan singkat bukti dari percakapan
@@ -562,7 +643,11 @@ RULES:
 - "konteks_bisnis" = informasi tentang bisnis, peran, industri, prioritas user
 - "pola_keputusan" = bagaimana user biasa membuat keputusan
 - "area_fokus" = topik yang sering dibahas atau dipentingkan
-- Maksimal 8 insight per ekstraksi
+- "gaya_kepemimpinan" = cara user memimpin tim (tegas, coaching, delegatif, micromanage, dll), pola interaksi dengan bawahan, pendekatan ke masalah SDM
+- "pola_stres" = tanda-tanda stres atau kelelahan yang terlihat, trigger stres, cara coping, kapan energi turun
+- "area_blind_spot" = hal-hal yang user cenderung abaikan, asumsi yang tidak diperiksa, pola berulang yang belum disadari, keputusan yang terlalu cepat tanpa refleksi
+- Maksimal 10 insight per ekstraksi
+- Prioritaskan "area_blind_spot" dan "pola_stres" jika terdeteksi — ini paling berharga untuk proactive reflection
 - Jika tidak ada insight baru yang jelas, kembalikan array kosong []
 
 Respond ONLY with valid JSON array, no other text.`;
@@ -583,14 +668,14 @@ Respond ONLY with valid JSON array, no other text.`;
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed) || parsed.length === 0) return;
 
-    const validCategories = ["gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting"];
+    const validCategories = ["gaya_berpikir", "preferensi_komunikasi", "konteks_bisnis", "pola_keputusan", "area_fokus", "koreksi_penting", "gaya_kepemimpinan", "pola_stres", "area_blind_spot"];
     const validPrefs = parsed
       .filter((p: any) =>
         p.category && validCategories.includes(p.category) &&
         p.insight && typeof p.insight === "string" &&
         typeof p.confidence === "number" && p.confidence >= 0.5 && p.confidence <= 1.0
       )
-      .slice(0, 8)
+      .slice(0, 10)
       .map((p: any) => ({
         category: p.category as string,
         insight: p.insight as string,
