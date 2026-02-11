@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus } from "lucide-react";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
 
 interface ParsedVoices {
@@ -110,10 +110,23 @@ function AssistantBubble({ content, index }: { content: string; index: number })
   );
 }
 
-function UserBubble({ content, index }: { content: string; index: number }) {
+function UserBubble({ content, index, images }: { content: string; index: number; images?: string[] }) {
   return (
     <div className="flex justify-end" data-testid={`bubble-user-${index}`}>
       <div className="px-3 py-2 rounded-md bg-primary text-primary-foreground max-w-[90%] sm:max-w-[75%]">
+        {images && images.length > 0 && (
+          <div className={`flex flex-wrap gap-1.5 mb-2 ${images.length === 1 ? "" : "grid grid-cols-2"}`} data-testid={`images-user-${index}`}>
+            {images.map((img, imgIdx) => (
+              <img
+                key={imgIdx}
+                src={img}
+                alt={`Gambar ${imgIdx + 1}`}
+                className="rounded-sm max-h-48 object-cover w-full"
+                data-testid={`img-user-${index}-${imgIdx}`}
+              />
+            ))}
+          </div>
+        )}
         <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-user-${index}`}>{content}</p>
       </div>
     </div>
@@ -165,9 +178,11 @@ export default function ChatPage() {
   const [showPrefs, setShowPrefs] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
     queryKey: ["/api/history"],
@@ -266,7 +281,7 @@ export default function ChatPage() {
   }, [messages, scrollToBottom]);
 
   const chatMutation = useMutation({
-    mutationFn: async (payload: { message: string }) => {
+    mutationFn: async (payload: { message: string; images?: string[] }) => {
       const res = await apiRequest("POST", "/api/chat", payload);
       return (await res.json()) as ChatResponse;
     },
@@ -308,20 +323,75 @@ export default function ChatPage() {
     },
   });
 
+  const processImageFile = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith("image/")) {
+        reject(new Error("Bukan file gambar"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Gagal membaca file"));
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const addImages = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (imageFiles.length === 0) return;
+    const maxTotal = 5;
+    const toProcess = imageFiles.slice(0, maxTotal - attachedImages.length);
+    if (toProcess.length === 0) return;
+    const results = await Promise.all(toProcess.map(processImageFile));
+    setAttachedImages((prev) => [...prev, ...results].slice(0, maxTotal));
+  }, [attachedImages.length, processImageFile]);
+
+  const removeImage = useCallback((idx: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      addImages(imageFiles);
+    }
+  }, [addImages]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      addImages(Array.from(files));
+    }
+    e.target.value = "";
+  }, [addImages]);
+
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || chatMutation.isPending) return;
+    const hasContent = trimmed || attachedImages.length > 0;
+    if (!hasContent || chatMutation.isPending) return;
 
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
 
-    const userMsg: ChatMessage = { role: "user", content: trimmed };
+    const msgText = trimmed || "Tolong analisa gambar ini";
+    const currentImages = attachedImages.length > 0 ? [...attachedImages] : undefined;
+    const userMsg: ChatMessage = { role: "user", content: msgText, images: currentImages };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAttachedImages([]);
 
-    chatMutation.mutate({ message: trimmed });
+    chatMutation.mutate({ message: msgText, images: currentImages });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -509,7 +579,7 @@ export default function ChatPage() {
 
           {messages.map((msg, i) =>
             msg.role === "user" ? (
-              <UserBubble key={i} content={msg.content} index={i} />
+              <UserBubble key={i} content={msg.content} index={i} images={msg.images} />
             ) : (
               <AssistantBubble key={i} content={msg.content} index={i} />
             ),
@@ -526,13 +596,57 @@ export default function ChatPage() {
             <span className="text-xs text-red-600 dark:text-red-400">Mendengarkan... tekan mic lagi untuk berhenti</span>
           </div>
         )}
+        {attachedImages.length > 0 && (
+          <div className="max-w-2xl mx-auto mb-2 flex flex-wrap gap-2" data-testid="container-image-preview">
+            {attachedImages.map((img, idx) => (
+              <div key={idx} className="relative group" data-testid={`preview-image-${idx}`}>
+                <img src={img} alt={`Preview ${idx + 1}`} className="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border" />
+                <button
+                  onClick={() => removeImage(idx)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
+                  data-testid={`button-remove-image-${idx}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {attachedImages.length < 5 && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="h-16 w-16 sm:h-20 sm:w-20 rounded-md border border-dashed flex items-center justify-center text-muted-foreground hover-elevate"
+                data-testid="button-add-more-images"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+          data-testid="input-file-upload"
+        />
         <div className="max-w-2xl mx-auto flex items-end gap-2">
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={chatMutation.isPending || attachedImages.length >= 5}
+            size="icon"
+            variant="outline"
+            data-testid="button-upload-image"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </Button>
           <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isListening ? "Bicara sekarang..." : "Ketik atau tekan mic..."}
+            onPaste={handlePaste}
+            placeholder={isListening ? "Bicara sekarang..." : attachedImages.length > 0 ? "Tulis pesan tentang gambar..." : "Ketik, paste gambar, atau tekan mic..."}
             rows={1}
             className="flex-1 resize-none min-h-[42px] max-h-[120px] text-[15px] sm:text-sm"
             onInput={(e) => {
@@ -556,7 +670,7 @@ export default function ChatPage() {
           )}
           <Button
             onClick={handleSend}
-            disabled={!input.trim() || chatMutation.isPending}
+            disabled={(!input.trim() && attachedImages.length === 0) || chatMutation.isPending}
             size="icon"
             data-testid="button-send"
           >

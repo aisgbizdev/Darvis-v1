@@ -108,6 +108,7 @@ DARVIS is an AI-powered thinking companion web application with quad-persona out
 - **Endpoint**: GET /api/persona-feedback
 
 ## Recent Changes
+- 2026-02-11: Added Image Upload & Analysis — upload file, paste clipboard, preview, multi-image (max 5), OpenAI Vision
 - 2026-02-11: Added Voice Input — tombol mic untuk speech-to-text, Bahasa Indonesia, pakai Web Speech API browser
 - 2026-02-11: **v0.3 — Single Voice Default** — DARVIS now responds as one unified voice by default, multi-persona only on-demand
 - 2026-02-11: Added DR aliases (Raha, Bapak, Bapa) to passive listening & profile enrichment detection
