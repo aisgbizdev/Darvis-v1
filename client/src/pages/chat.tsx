@@ -73,17 +73,17 @@ function PersonaCard({ persona, content, index }: { persona: keyof typeof PERSON
   return (
     <div className="flex gap-0">
       <div className={`w-1 shrink-0 rounded-full ${config.accentClass} opacity-40`} />
-      <Card className="p-3 bg-card border-card-border flex-1 ml-2">
+      <Card className="p-2.5 sm:p-3 bg-card border-card-border flex-1 ml-2">
         <div className="flex items-center gap-2 mb-1.5">
-          <div className={`w-5 h-5 rounded-md ${config.bgClass} flex items-center justify-center`} data-testid={`icon-${persona}-${index}`}>
+          <div className={`w-5 h-5 rounded-md ${config.bgClass} flex items-center justify-center shrink-0`} data-testid={`icon-${persona}-${index}`}>
             <Icon className={`w-3 h-3 ${config.textClass}`} />
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className={`text-xs font-semibold ${config.textClass}`} data-testid={`label-${persona}-${index}`}>{config.label}</span>
-            <span className="text-[9px] text-muted-foreground">{config.subtitle}</span>
+            <span className="text-[9px] text-muted-foreground hidden sm:inline">{config.subtitle}</span>
           </div>
         </div>
-        <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-${persona}-${index}`}>{content}</p>
+        <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-${persona}-${index}`}>{content}</p>
       </Card>
     </div>
   );
@@ -94,7 +94,7 @@ function AssistantBubble({ content, index }: { content: string; index: number })
 
   if (parsed && (parsed.broto || parsed.rara || parsed.rere || parsed.dr)) {
     return (
-      <div className="flex flex-col gap-2 max-w-[85%] sm:max-w-[75%]" data-testid={`bubble-assistant-${index}`}>
+      <div className="flex flex-col gap-2 max-w-full sm:max-w-[85%] md:max-w-[75%]" data-testid={`bubble-assistant-${index}`}>
         {parsed.broto && <PersonaCard persona="broto" content={parsed.broto} index={index} />}
         {parsed.rara && <PersonaCard persona="rara" content={parsed.rara} index={index} />}
         {parsed.rere && <PersonaCard persona="rere" content={parsed.rere} index={index} />}
@@ -104,8 +104,8 @@ function AssistantBubble({ content, index }: { content: string; index: number })
   }
 
   return (
-    <Card className="p-3 max-w-[85%] sm:max-w-[75%] bg-card border-card-border" data-testid={`bubble-assistant-${index}`}>
-      <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-assistant-${index}`}>{content}</p>
+    <Card className="p-2.5 sm:p-3 max-w-full sm:max-w-[85%] md:max-w-[75%] bg-card border-card-border" data-testid={`bubble-assistant-${index}`}>
+      <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-assistant-${index}`}>{content}</p>
     </Card>
   );
 }
@@ -113,8 +113,8 @@ function AssistantBubble({ content, index }: { content: string; index: number })
 function UserBubble({ content, index }: { content: string; index: number }) {
   return (
     <div className="flex justify-end" data-testid={`bubble-user-${index}`}>
-      <div className="px-3 py-2 rounded-md bg-primary text-primary-foreground max-w-[85%] sm:max-w-[75%]">
-        <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-user-${index}`}>{content}</p>
+      <div className="px-3 py-2 rounded-md bg-primary text-primary-foreground max-w-[90%] sm:max-w-[75%]">
+        <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-user-${index}`}>{content}</p>
       </div>
     </div>
   );
@@ -122,8 +122,8 @@ function UserBubble({ content, index }: { content: string; index: number }) {
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-2 max-w-[85%] sm:max-w-[75%]" data-testid="status-typing">
-      <Card className="p-3 bg-card border-card-border">
+    <div className="flex items-center gap-2 max-w-full sm:max-w-[75%]" data-testid="status-typing">
+      <Card className="p-2.5 sm:p-3 bg-card border-card-border">
         <div className="flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           <span className="text-xs text-muted-foreground" data-testid="text-typing-status">DARVIS sedang berpikir...</span>
@@ -250,16 +250,16 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background" data-testid="page-chat">
-      <header className="flex items-center justify-between gap-2 px-4 py-3 border-b flex-wrap" data-testid="header-darvis">
-        <div className="flex items-center gap-2.5" data-testid="header-brand">
-          <img src="/darvis-logo.png" alt="DARVIS" className="w-8 h-8 rounded-md object-cover" />
+    <div className="flex flex-col h-[100dvh] bg-background" data-testid="page-chat">
+      <header className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 sm:py-3 border-b shrink-0" data-testid="header-darvis">
+        <div className="flex items-center gap-2" data-testid="header-brand">
+          <img src="/darvis-logo.png" alt="DARVIS" className="w-7 h-7 sm:w-8 sm:h-8 rounded-md object-cover" />
           <div>
             <h1 className="text-sm font-bold tracking-tight leading-none" data-testid="text-app-title">DARVIS</h1>
             <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">Thinking Companion v0.2</p>
           </div>
         </div>
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-0.5 sm:gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -271,96 +271,97 @@ export default function ChatPage() {
           </Button>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => clearMutation.mutate()}
             disabled={messages.length === 0 || clearMutation.isPending}
             data-testid="button-clear-chat"
           >
-            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-            Clear
+            <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
       {showPrefs && (
-        <div className="border-b px-4 py-3 bg-card/50 max-h-[40vh] overflow-y-auto" data-testid="panel-preferences">
-          <div className="max-w-2xl mx-auto">
-            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold" data-testid="text-prefs-title">Yang DARVIS Pelajari</h3>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setShowPrefs(false)} data-testid="button-close-preferences">
-                <X className="w-3.5 h-3.5" />
-              </Button>
+        <div className="fixed inset-0 z-50 sm:relative sm:inset-auto sm:z-auto flex flex-col bg-background sm:bg-card/50 sm:border-b sm:max-h-[40vh] pt-[env(safe-area-inset-top,0px)] sm:pt-0" data-testid="panel-preferences">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b sm:border-b-0 shrink-0">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold" data-testid="text-prefs-title">Yang DARVIS Pelajari</h3>
             </div>
-            {(!prefsData?.preferences || prefsData.preferences.length === 0) ? (
-              <p className="text-xs text-muted-foreground py-2" data-testid="text-prefs-empty">
-                Belum ada insight yang dipelajari. DARVIS akan mulai belajar setelah beberapa percakapan.
-              </p>
-            ) : (
-              <div className="space-y-2" data-testid="container-prefs-list">
-                {Object.entries(
-                  prefsData.preferences.reduce<Record<string, typeof prefsData.preferences>>((acc, p) => {
-                    if (!acc[p.category]) acc[p.category] = [];
-                    acc[p.category].push(p);
-                    return acc;
-                  }, {})
-                ).map(([category, items]) => (
-                  <div key={category} data-testid={`prefs-group-${category}`}>
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      {CATEGORY_LABELS[category] || category}
-                    </p>
-                    {items.map((item) => (
-                      <div key={item.id} className="flex items-start gap-2 py-1" data-testid={`pref-item-${item.id}`}>
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-1.5 shrink-0" />
-                        <p className="text-xs leading-relaxed">{item.insight}</p>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {feedbackData?.feedback && feedbackData.feedback.length > 0 && (
-              <div className="mt-4 pt-3 border-t" data-testid="container-persona-feedback">
-                <div className="flex items-center gap-2 mb-2">
-                  <User className="w-3.5 h-3.5 text-emerald-500" />
-                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Kesan Orang Lain</h4>
-                </div>
-                {Object.entries(
-                  feedbackData.feedback.reduce<Record<string, typeof feedbackData.feedback>>((acc, fb) => {
-                    if (!acc[fb.target]) acc[fb.target] = [];
-                    acc[fb.target].push(fb);
-                    return acc;
-                  }, {})
-                ).map(([target, items]) => {
-                  const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
-                  const config = target === "dr" ? PERSONA_CONFIG.dr : target === "broto" ? PERSONA_CONFIG.broto : target === "rara" ? PERSONA_CONFIG.rara : PERSONA_CONFIG.rere;
-                  return (
-                    <div key={target} className="mb-2" data-testid={`feedback-group-${target}`}>
-                      <p className={`text-[11px] font-semibold mb-1 ${config.textClass}`}>{label}</p>
+            <Button variant="ghost" size="icon" onClick={() => setShowPrefs(false)} data-testid="button-close-preferences">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-4 sm:pb-3">
+            <div className="max-w-2xl mx-auto">
+              {(!prefsData?.preferences || prefsData.preferences.length === 0) ? (
+                <p className="text-xs text-muted-foreground py-2" data-testid="text-prefs-empty">
+                  Belum ada insight yang dipelajari. DARVIS akan mulai belajar setelah beberapa percakapan.
+                </p>
+              ) : (
+                <div className="space-y-3 sm:space-y-2" data-testid="container-prefs-list">
+                  {Object.entries(
+                    prefsData.preferences.reduce<Record<string, typeof prefsData.preferences>>((acc, p) => {
+                      if (!acc[p.category]) acc[p.category] = [];
+                      acc[p.category].push(p);
+                      return acc;
+                    }, {})
+                  ).map(([category, items]) => (
+                    <div key={category} data-testid={`prefs-group-${category}`}>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        {CATEGORY_LABELS[category] || category}
+                      </p>
                       {items.map((item) => (
-                        <div key={item.id} className="flex items-start gap-2 py-0.5" data-testid={`feedback-item-${item.id}`}>
-                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
-                            item.sentiment === "positive" ? "bg-emerald-400" :
-                            item.sentiment === "negative" ? "bg-red-400" :
-                            item.sentiment === "mixed" ? "bg-amber-400" : "bg-muted-foreground/50"
-                          }`} />
-                          <p className="text-xs leading-relaxed">{item.feedback}</p>
+                        <div key={item.id} className="flex items-start gap-2 py-1" data-testid={`pref-item-${item.id}`}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-1.5 shrink-0" />
+                          <p className="text-[13px] sm:text-xs leading-relaxed">{item.insight}</p>
                         </div>
                       ))}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+
+              {feedbackData?.feedback && feedbackData.feedback.length > 0 && (
+                <div className="mt-4 pt-3 border-t" data-testid="container-persona-feedback">
+                  <div className="flex items-center gap-2 mb-2">
+                    <User className="w-3.5 h-3.5 text-emerald-500" />
+                    <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Kesan Orang Lain</h4>
+                  </div>
+                  {Object.entries(
+                    feedbackData.feedback.reduce<Record<string, typeof feedbackData.feedback>>((acc, fb) => {
+                      if (!acc[fb.target]) acc[fb.target] = [];
+                      acc[fb.target].push(fb);
+                      return acc;
+                    }, {})
+                  ).map(([target, items]) => {
+                    const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
+                    const config = target === "dr" ? PERSONA_CONFIG.dr : target === "broto" ? PERSONA_CONFIG.broto : target === "rara" ? PERSONA_CONFIG.rara : PERSONA_CONFIG.rere;
+                    return (
+                      <div key={target} className="mb-2" data-testid={`feedback-group-${target}`}>
+                        <p className={`text-[11px] font-semibold mb-1 ${config.textClass}`}>{label}</p>
+                        {items.map((item) => (
+                          <div key={item.id} className="flex items-start gap-2 py-0.5" data-testid={`feedback-item-${item.id}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                              item.sentiment === "positive" ? "bg-emerald-400" :
+                              item.sentiment === "negative" ? "bg-red-400" :
+                              item.sentiment === "mixed" ? "bg-amber-400" : "bg-muted-foreground/50"
+                            }`} />
+                            <p className="text-[13px] sm:text-xs leading-relaxed">{item.feedback}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4" ref={scrollRef} data-testid="container-messages">
-        <div className="py-4 space-y-3 max-w-2xl mx-auto">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4" ref={scrollRef} data-testid="container-messages">
+        <div className="py-3 sm:py-4 space-y-3 max-w-2xl mx-auto">
           {historyLoading && (
             <div className="flex items-center justify-center py-16" data-testid="status-loading-history">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -368,13 +369,13 @@ export default function ChatPage() {
           )}
 
           {!historyLoading && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-state">
-              <img src="/darvis-logo.png" alt="DARVIS" className="w-14 h-14 rounded-md object-cover mb-4" />
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-center" data-testid="empty-state">
+              <img src="/darvis-logo.png" alt="DARVIS" className="w-12 h-12 sm:w-14 sm:h-14 rounded-md object-cover mb-3 sm:mb-4" />
               <h2 className="text-base font-semibold mb-1" data-testid="text-greeting">DARVIS</h2>
-              <p className="text-sm text-muted-foreground max-w-xs" data-testid="text-tagline">
+              <p className="text-[13px] sm:text-sm text-muted-foreground max-w-[280px] sm:max-w-xs" data-testid="text-tagline">
                 Thinking companion. Ceritakan apa yang lagi lo pikirin, kita bedah bareng.
               </p>
-              <div className="flex flex-wrap gap-2 justify-center mt-6">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 justify-center mt-5 sm:mt-6 w-full max-w-sm sm:max-w-none px-4 sm:px-0">
                 {[
                   "Bantu gw pikirin keputusan ini",
                   "Sparring soal strategi dong",
@@ -386,7 +387,7 @@ export default function ChatPage() {
                       setInput(q);
                       inputRef.current?.focus();
                     }}
-                    className="px-3 py-1.5 text-xs rounded-md border bg-card text-foreground hover-elevate active-elevate-2 transition-colors"
+                    className="px-3 py-2.5 sm:py-1.5 text-[13px] sm:text-xs rounded-md border bg-card text-foreground hover-elevate active-elevate-2 transition-colors text-left sm:text-center"
                     data-testid={`button-suggestion-${i}`}
                   >
                     {q}
@@ -408,16 +409,16 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <div className="border-t px-4 py-3 bg-background" data-testid="container-input">
+      <div className="border-t px-3 sm:px-4 py-2 sm:py-3 bg-background shrink-0 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]" data-testid="container-input">
         <div className="max-w-2xl mx-auto flex items-end gap-2">
           <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ketik pesan untuk DARVIS..."
+            placeholder="Ketik pesan..."
             rows={1}
-            className="flex-1 resize-none min-h-[38px] max-h-[120px] text-sm"
+            className="flex-1 resize-none min-h-[42px] max-h-[120px] text-[15px] sm:text-sm"
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
               target.style.height = "auto";
