@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff } from "lucide-react";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
 
 interface ParsedVoices {
@@ -163,8 +163,11 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [showPrefs, setShowPrefs] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
     queryKey: ["/api/history"],
@@ -194,6 +197,63 @@ export default function ChatPage() {
   useEffect(() => {
     apiRequest("POST", "/api/seed-profile").catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setVoiceSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.lang = "id-ID";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      let finalTranscript = "";
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + " ";
+          } else {
+            interim = transcript;
+          }
+        }
+        setInput((finalTranscript + interim).trim());
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        finalTranscript = "";
+      };
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (event.error !== "aborted") {
+          setIsListening(false);
+        }
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
+
+  const toggleVoice = useCallback(() => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setInput("");
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  }, [isListening]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -251,6 +311,11 @@ export default function ChatPage() {
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || chatMutation.isPending) return;
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
     setMessages((prev) => [...prev, userMsg]);
@@ -455,13 +520,19 @@ export default function ChatPage() {
       </div>
 
       <div className="border-t px-3 sm:px-4 py-2 sm:py-3 bg-background shrink-0 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]" data-testid="container-input">
+        {isListening && (
+          <div className="max-w-2xl mx-auto mb-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-500/10 dark:bg-red-400/10" data-testid="status-voice-listening">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+            <span className="text-xs text-red-600 dark:text-red-400">Mendengarkan... tekan mic lagi untuk berhenti</span>
+          </div>
+        )}
         <div className="max-w-2xl mx-auto flex items-end gap-2">
           <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ketik pesan..."
+            placeholder={isListening ? "Bicara sekarang..." : "Ketik atau tekan mic..."}
             rows={1}
             className="flex-1 resize-none min-h-[42px] max-h-[120px] text-[15px] sm:text-sm"
             onInput={(e) => {
@@ -472,6 +543,17 @@ export default function ChatPage() {
             disabled={chatMutation.isPending}
             data-testid="input-message"
           />
+          {voiceSupported && (
+            <Button
+              onClick={toggleVoice}
+              disabled={chatMutation.isPending}
+              size="icon"
+              variant={isListening ? "destructive" : "outline"}
+              data-testid="button-voice"
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
+          )}
           <Button
             onClick={handleSend}
             disabled={!input.trim() || chatMutation.isPending}
