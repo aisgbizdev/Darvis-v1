@@ -63,6 +63,8 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **Endpoints**: GET /api/preferences (view), POST /api/clear (reset all)
 
 ## Recent Changes
+- 2026-02-11: Enriched NODE_NM v0.2 with curated knowledge from Gwen Stacy/NM AI (technical analysis, fundamental analysis, instrument characteristics, trading strategies education, korelasi, sentimen)
+- 2026-02-11: Enriched NODE_RISK_GUARD v0.2 with curated knowledge from Gwen Stacy/NM AI (money management, psychology, cognitive biases, common mistakes, SPA trading concepts, regulasi & perlindungan)
 - 2026-02-10: Added Auto-Learn system with AI-powered preference extraction and injection
 - 2026-02-10: Added NODE_RISK_GUARD support with risk education keyword + NLP detection, fallback priority over NM
 - 2026-02-10: Added NODE_NM support with market/data keyword + NLP detection
