@@ -23,6 +23,7 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - `prompts/DARVIS_NODE_AiSG.md` - Audit intelligence & governance context node
 - `prompts/DARVIS_NODE_NM.md` - Market intelligence & data authority context node
 - `prompts/DARVIS_NODE_RISK_GUARD.md` - Risk education & mitigation context node
+- `prompts/DARVIS_NODE_COMPLIANCE.md` - Preventive compliance & operational risk context node
 
 ## Features
 - Single-page minimalist chat UI
@@ -32,6 +33,7 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - Intent detection for audit/governance (keywords: audit, evaluasi, kinerja, cabang, governance, ews, etc. + NLP regex patterns)
 - Intent detection for market/data (keywords: harga, emas, gold, oil, market, inflasi, the fed, trading, etc. + NLP regex patterns)
 - Intent detection for risk education (keywords: risiko, martingale, leverage, margin, drawdown, loss, money management, etc. + NLP regex patterns)
+- Intent detection for compliance/operational risk (keywords: kyc, kepatuhan, compliance, kewajaran, nasabah, komplain, eskalasi, etc. + NLP regex patterns)
 - Multi-node support: NODE_BIAS prioritized for refleksi awal when multiple nodes detected
 - Fallback: if ragu market vs risiko, prioritaskan NODE_RISK_GUARD
 - Server-side SQLite persistent chat history with 10-message context window + auto-summary
@@ -48,10 +50,11 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **NODE_AiSG**: Audit intelligence & governance (triggered by audit/evaluasi/kinerja/governance keywords + regex patterns)
 - **NODE_NM**: Market intelligence & data authority (triggered by market/harga/ekonomi keywords + regex patterns)
 - **NODE_RISK_GUARD**: Risk education & mitigation (triggered by risiko/martingale/leverage/margin/drawdown keywords + regex patterns)
+- **NODE_COMPLIANCE**: Preventive compliance & operational risk (triggered by kyc/kepatuhan/compliance/kewajaran/nasabah/komplain/eskalasi keywords + regex patterns)
 - Priority: NODE_BIAS > NODE_RISK_GUARD > NODE_NM > other nodes
 - When RISK_GUARD + NM both detected: NM becomes subordinate to RISK_GUARD
 - Multi-node without BIAS: turunkan klaim, bahasa reflektif, no penilaian final
-- Node injection order: BIAS (priority) → RISK_GUARD → NM → AiSG → SOLIDGROUP
+- Node injection order: BIAS (priority) → RISK_GUARD → NM → AiSG → COMPLIANCE → SOLIDGROUP
 
 ## Environment
 - `OPENAI_API_KEY` - Required, stored in Replit Secrets
@@ -66,6 +69,7 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **Endpoints**: GET /api/preferences (view), POST /api/clear (reset all)
 
 ## Recent Changes
+- 2026-02-11: Added NODE_COMPLIANCE v0.1 with curated knowledge from SG Compliance & Risk Assistant (preventive compliance framework, 9 kategori risiko, red flags, checklist kepatuhan, pertanyaan reflektif)
 - 2026-02-11: Enriched NODE_AiSG v0.2 with curated knowledge from AiSG (18 Pilar framework, zona kinerja, ProDem, Reality Score gap, EWS, SWOT, action plan 30-60-90, coaching knowledge — all framed as reflective tools)
 - 2026-02-11: Enriched NODE_BIAS v0.2 with curated knowledge from BiAS Pro (cognitive bias catalog 23 items, decision frameworks 6 models, teknik debiasing 7 metode, pola emosional, template refleksi, warmth index)
 - 2026-02-11: Enriched NODE_NM v0.2 with curated knowledge from Gwen Stacy/NM AI (technical analysis, fundamental analysis, instrument characteristics, trading strategies education, korelasi, sentimen)

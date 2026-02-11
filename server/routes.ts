@@ -59,7 +59,6 @@ const AISG_KEYWORDS = [
   "integritas",
   "early warning", "ews",
   "governance", "tata kelola",
-  "kepatuhan", "compliance",
   "pilar", "prodem",
   "rotasi", "mutasi",
   "sop", "prosedur",
@@ -95,6 +94,29 @@ const RISK_GUARD_KEYWORDS = [
   "rugi", "kerugian",
   "modal habis", "modal hilang",
   "bangkrut",
+];
+
+const COMPLIANCE_KEYWORDS = [
+  "kyc", "know your customer",
+  "kepatuhan", "compliance",
+  "kewajaran", "wajar",
+  "nasabah bermasalah", "nasabah komplain",
+  "komplain", "sengketa",
+  "eskalasi",
+  "dokumentasi", "pencatatan",
+  "red flag",
+  "apu ppt", "anti pencucian", "pencucian uang",
+  "sumber dana", "dana tidak jelas",
+  "profil nasabah",
+  "regulasi",
+  "top up besar", "withdrawal besar",
+  "jaminan hasil", "janji hasil",
+  "outlier",
+  "perlindungan nasabah",
+  "preventif", "pencegahan",
+  "tata kelola operasional",
+  "pelanggaran",
+  "sanksi regulasi",
 ];
 
 const BIAS_KEYWORDS = [
@@ -218,6 +240,31 @@ function detectNMIntent(message: string): boolean {
   return nmPatterns.some((p) => p.test(lower));
 }
 
+function detectComplianceIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+
+  if (COMPLIANCE_KEYWORDS.some((kw) => lower.includes(kw))) {
+    return true;
+  }
+
+  const compliancePatterns = [
+    /nasabah\s+(bermasalah|komplain|baru\s+bermasalah)/i,
+    /sumber\s+(dana|uang)\s+(tidak|gak?|nggak?)\s*(jelas|konsisten)/i,
+    /profil\s+(nasabah|customer|klien)/i,
+    /top\s+up\s+(besar|segera|setelah\s+rugi)/i,
+    /jaminan\s+(hasil|keuntungan|profit|return)/i,
+    /janji\s+(hasil|keuntungan|profit|return)/i,
+    /dana\s+(besar|tidak\s+jelas|mencurigakan)/i,
+    /pola\s+(transaksi|komplain|withdrawal|top\s+up)/i,
+    /eskalasi\s+(internal|ke\s+direksi|ke\s+kepatuhan)/i,
+    /cabang\s+(outlier|bermasalah)/i,
+    /risiko\s+(reputasi|operasional|kepatuhan|compliance)/i,
+    /apakah\s+(ini\s+)?wajar/i,
+  ];
+
+  return compliancePatterns.some((p) => p.test(lower));
+}
+
 function detectRiskGuardIntent(message: string): boolean {
   const lower = message.toLowerCase();
 
@@ -334,6 +381,7 @@ export async function registerRoutes(
       const isAiSG = detectAiSGIntent(message);
       const isNM = detectNMIntent(message);
       const isRiskGuard = detectRiskGuardIntent(message);
+      const isCompliance = detectComplianceIntent(message);
 
       if (isBias) {
         const biasPrompt = readPromptFile("DARVIS_NODE_BIAS.md");
@@ -370,6 +418,14 @@ export async function registerRoutes(
         if (aisgPrompt) {
           systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_AiSG\n\n${aisgPrompt}`;
           nodesUsed.push("NODE_AiSG");
+        }
+      }
+
+      if (isCompliance) {
+        const compliancePrompt = readPromptFile("DARVIS_NODE_COMPLIANCE.md");
+        if (compliancePrompt) {
+          systemContent += `\n\n---\nNODE CONTEXT AKTIF: NODE_COMPLIANCE\n\n${compliancePrompt}`;
+          nodesUsed.push("NODE_COMPLIANCE");
         }
       }
 
