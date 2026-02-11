@@ -66,6 +66,7 @@ DARVIS is an AI-powered thinking companion web application with dual-persona out
 - **Endpoints**: GET /api/preferences (view), POST /api/clear (reset all)
 
 ## Recent Changes
+- 2026-02-11: Enriched NODE_AiSG v0.2 with curated knowledge from AiSG (18 Pilar framework, zona kinerja, ProDem, Reality Score gap, EWS, SWOT, action plan 30-60-90, coaching knowledge — all framed as reflective tools)
 - 2026-02-11: Enriched NODE_BIAS v0.2 with curated knowledge from BiAS Pro (cognitive bias catalog 23 items, decision frameworks 6 models, teknik debiasing 7 metode, pola emosional, template refleksi, warmth index)
 - 2026-02-11: Enriched NODE_NM v0.2 with curated knowledge from Gwen Stacy/NM AI (technical analysis, fundamental analysis, instrument characteristics, trading strategies education, korelasi, sentimen)
 - 2026-02-11: Enriched NODE_RISK_GUARD v0.2 with curated knowledge from Gwen Stacy/NM AI (money management, psychology, cognitive biases, common mistakes, SPA trading concepts, regulasi & perlindungan)
