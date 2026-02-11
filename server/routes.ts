@@ -15,6 +15,9 @@ import {
   getLearnedPreferences,
   bulkUpsertPreferences,
   clearPreferences,
+  getPersonaFeedback,
+  bulkSavePersonaFeedback,
+  clearPersonaFeedback,
 } from "./db";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -380,6 +383,88 @@ function enforceFormat(reply: string): string {
   return `Broto: ${brotoContent}\n\nRara: ${raraContent}\n\nRere: ${rereContent}\n\nDR: ${drContent}`;
 }
 
+function detectPersonaMention(message: string): boolean {
+  const lower = message.toLowerCase();
+  const hasPersonaName = /\b(dr|broto|rara|rere)\b/.test(lower);
+  if (!hasPersonaName) return false;
+
+  const opinionSignals = [
+    /(?:orangnya|tuh|itu|emang|sih|ya|kan|banget|gitu|kayak|menurut|kenal|menurutku|menurut\s+gw)/,
+    /(?:kadang|suka|selalu|terlalu|agak|lumayan|memang|sebenernya|sejujurnya)/,
+    /(?:keren|bagus|hebat|pinter|cerdas|keras|tegas|lembut|lucu|kocak|serius|fair|galak|sabar|bijak|visioner|inspiratif)/,
+    /(?:kelebihan|kelemahan|kekurangan|sifat|karakter|kepribadian|gaya|cara|style)/,
+    /(?:kenal|tau|tahu|kerja\s+bareng|kerja\s+sama|ngobrol|cerita|denger|pernah)/,
+    /(?:suka|gak\s+suka|setuju|gak\s+setuju|bener|salah|cocok|pas|tepat)/,
+    /(?:lebih\s+baik|harusnya|sebaiknya|kalau\s+boleh|jujur)/,
+  ];
+  return opinionSignals.some((p) => p.test(lower));
+}
+
+async function extractPersonaFeedback(userMessage: string, assistantReply: string) {
+  const prompt = `Kamu adalah sistem pendeteksi feedback persona. Analisis pesan berikut dan cek apakah ada penilaian/pendapat/cerita tentang DR, Broto, Rara, atau Rere.
+
+Pesan user: "${userMessage}"
+
+Balasan DARVIS: "${assistantReply}"
+
+Jika user menyebutkan pendapat, kesan, penilaian, atau cerita tentang salah satu dari DR, Broto, Rara, atau Rere, ekstrak dalam format JSON array:
+- target: "dr" atau "broto" atau "rara" atau "rere"
+- feedback: ringkasan pendapat/kesan dalam 1-2 kalimat bahasa Indonesia
+- sentiment: "positive", "negative", "neutral", atau "mixed"
+- confidence: 0.5-1.0
+- source_context: kutipan singkat dari pesan user yang jadi bukti
+
+RULES:
+- Hanya ekstrak jika ada pendapat/penilaian NYATA, bukan sekadar menyebut nama
+- "DR" di sini merujuk ke persona/orang bernama DR, BUKAN DARVIS sebagai sistem
+- Jangan ekstrak dari respons DARVIS, hanya dari pesan USER
+- Jika tidak ada feedback, kembalikan []
+
+Respond ONLY with valid JSON array.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [{ role: "user", content: prompt }],
+      max_completion_tokens: 1024,
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) return;
+
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+    const validTargets = ["dr", "broto", "rara", "rere"];
+    const validSentiments = ["positive", "negative", "neutral", "mixed"];
+    const validItems = parsed
+      .filter((p: any) =>
+        p.target && validTargets.includes(p.target) &&
+        p.feedback && typeof p.feedback === "string" &&
+        p.sentiment && validSentiments.includes(p.sentiment) &&
+        typeof p.confidence === "number" && p.confidence >= 0.5 && p.confidence <= 1.0
+      )
+      .slice(0, 5)
+      .map((p: any) => ({
+        target: p.target as string,
+        feedback: p.feedback as string,
+        sentiment: p.sentiment as string,
+        confidence: p.confidence as number,
+        source_context: (p.source_context as string) || null,
+      }));
+
+    if (validItems.length > 0) {
+      bulkSavePersonaFeedback(validItems);
+      console.log(`Passive listening: captured ${validItems.length} persona feedback(s)`);
+    }
+  } catch (err: any) {
+    console.error("Persona feedback extraction failed:", err?.message || err);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -406,9 +491,20 @@ export async function registerRoutes(
     try {
       clearHistory(USER_ID);
       clearPreferences(USER_ID);
+      clearPersonaFeedback();
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Clear API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/persona-feedback", (_req, res) => {
+    try {
+      const feedback = getPersonaFeedback();
+      return res.json({ feedback });
+    } catch (err: any) {
+      console.error("Persona feedback API error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -575,6 +671,28 @@ export async function registerRoutes(
         }
       }
 
+      const personaFeedbacks = getPersonaFeedback();
+      if (personaFeedbacks.length > 0) {
+        const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
+        for (const fb of personaFeedbacks) {
+          if (!grouped[fb.target]) grouped[fb.target] = [];
+          if (grouped[fb.target].length < 5) {
+            grouped[fb.target].push({ feedback: fb.feedback, sentiment: fb.sentiment });
+          }
+        }
+        let fbBlock = "\n\n---\nPASSIVE LISTENING: FEEDBACK DARI ORANG LAIN\nBerikut adalah pendapat/kesan orang lain yang pernah disampaikan secara natural dalam percakapan. Gunakan ini untuk memperkaya self-awareness setiap persona:\n\n";
+        for (const [target, items] of Object.entries(grouped)) {
+          const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
+          fbBlock += `[${label}]\n`;
+          for (const item of items) {
+            fbBlock += `- (${item.sentiment}) ${item.feedback}\n`;
+          }
+          fbBlock += "\n";
+        }
+        fbBlock += "Catatan: Integrasikan feedback ini secara natural. Jangan sebutkan bahwa kamu 'mendengar dari orang lain'. Gunakan untuk memperdalam karakter dan self-awareness tiap persona.";
+        systemContent += fbBlock;
+      }
+
       const learnedPrefs = getLearnedPreferences(USER_ID);
       if (learnedPrefs.length > 0) {
         const grouped: Record<string, string[]> = {};
@@ -633,6 +751,12 @@ export async function registerRoutes(
 
       saveMessage(USER_ID, "user", message);
       saveMessage(USER_ID, "assistant", reply);
+
+      if (detectPersonaMention(message)) {
+        extractPersonaFeedback(message, reply).catch((err) => {
+          console.error("Passive listening error:", err?.message || err);
+        });
+      }
 
       const msgCount = getMessageCount(USER_ID);
       if (msgCount > 0 && msgCount % 20 === 0) {

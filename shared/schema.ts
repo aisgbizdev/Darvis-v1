@@ -33,3 +33,17 @@ export interface LearnedPreferenceItem {
 export interface PreferencesResponse {
   preferences: LearnedPreferenceItem[];
 }
+
+export interface PersonaFeedbackItem {
+  id: number;
+  target: string;
+  feedback: string;
+  sentiment: string;
+  confidence: number;
+  source_context: string | null;
+  created_at: string;
+}
+
+export interface PersonaFeedbackResponse {
+  feedback: PersonaFeedbackItem[];
+}

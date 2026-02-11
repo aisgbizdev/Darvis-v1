@@ -39,6 +39,18 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_learned_prefs_user_id ON learned_preferences(user_id);
   CREATE INDEX IF NOT EXISTS idx_learned_prefs_category ON learned_preferences(category);
+
+  CREATE TABLE IF NOT EXISTS persona_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target TEXT NOT NULL CHECK(target IN ('dr', 'broto', 'rara', 'rere')),
+    feedback TEXT NOT NULL,
+    sentiment TEXT NOT NULL DEFAULT 'neutral' CHECK(sentiment IN ('positive', 'negative', 'neutral', 'mixed')),
+    confidence REAL NOT NULL DEFAULT 0.7,
+    source_context TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_persona_feedback_target ON persona_feedback(target);
 `);
 
 export function getLastMessages(userId: string, limit: number = 10) {
@@ -164,6 +176,60 @@ export function bulkUpsertPreferences(
 
 export function clearPreferences(userId: string) {
   db.prepare(`DELETE FROM learned_preferences WHERE user_id = ?`).run(userId);
+}
+
+export interface PersonaFeedback {
+  id: number;
+  target: string;
+  feedback: string;
+  sentiment: string;
+  confidence: number;
+  source_context: string | null;
+  created_at: string;
+}
+
+export function getPersonaFeedback(target?: string): PersonaFeedback[] {
+  if (target) {
+    return db.prepare(`SELECT * FROM persona_feedback WHERE target = ? ORDER BY confidence DESC, created_at DESC`).all(target) as PersonaFeedback[];
+  }
+  return db.prepare(`SELECT * FROM persona_feedback ORDER BY target, confidence DESC, created_at DESC`).all() as PersonaFeedback[];
+}
+
+export function savePersonaFeedback(
+  target: string,
+  feedback: string,
+  sentiment: string,
+  confidence: number,
+  sourceContext: string | null
+) {
+  const existing = db.prepare(`
+    SELECT id FROM persona_feedback WHERE target = ? AND feedback = ?
+  `).get(target, feedback) as { id: number } | undefined;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE persona_feedback SET confidence = ?, sentiment = ?, source_context = ?, created_at = datetime('now') WHERE id = ?
+    `).run(confidence, sentiment, sourceContext, existing.id);
+  } else {
+    db.prepare(`
+      INSERT INTO persona_feedback (target, feedback, sentiment, confidence, source_context) VALUES (?, ?, ?, ?, ?)
+    `).run(target, feedback, sentiment, confidence, sourceContext);
+  }
+}
+
+export function bulkSavePersonaFeedback(
+  items: { target: string; feedback: string; sentiment: string; confidence: number; source_context: string | null }[]
+) {
+  const transaction = db.transaction(() => {
+    for (const item of items) {
+      savePersonaFeedback(item.target, item.feedback, item.sentiment, item.confidence, item.source_context);
+    }
+  });
+  transaction();
+}
+
+export function clearPersonaFeedback() {
+  db.prepare(`DELETE FROM persona_feedback`).run();
 }
 
 export function getPreferenceCount(userId: string): number {

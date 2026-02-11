@@ -85,7 +85,20 @@ DARVIS is an AI-powered thinking companion web application with quad-persona out
 ## Environment
 - `OPENAI_API_KEY` - Required, stored in Replit Secrets
 
+## Passive Listening System
+- **Trigger**: Deteksi otomatis ketika orang menyebut DR/Broto/Rara/Rere dengan opini/kesan
+- **Detection**: Cek nama persona + sinyal opini (adjective, opinion words, etc.)
+- **Extraction**: AI-powered extraction → target, feedback, sentiment, confidence
+- **Storage**: persona_feedback table in SQLite
+- **Injection**: Top 5 feedback per persona injected into system prompt
+- **UI**: Shown in preferences panel under "Kesan Orang Lain" with color-coded sentiment dots
+- **Clear**: Clearing chat also clears persona feedback
+- **Endpoint**: GET /api/persona-feedback
+
 ## Recent Changes
+- 2026-02-11: Added Passive Listening system — otomatis tangkap kesan orang tentang DR/Broto/Rara/Rere
+- 2026-02-11: Updated branding — removed "DiAn Raha" references, logo custom, "Thinking Companion" subtitle
+- 2026-02-11: Updated empty state — digital twin positioning, no persona badges
 - 2026-02-11: **v0.2 MAJOR UPGRADE** — 4-persona system (Broto, Rara, Rere, DR)
 - 2026-02-11: Created DARVIS_PROFILE_DR.md — comprehensive DR profile curated from 13 personal documents
 - 2026-02-11: Added Rere persona (complementary/creative perspectives)

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User } from "lucide-react";
-import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse } from "@shared/schema";
+import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse } from "@shared/schema";
 
 interface ParsedVoices {
   broto: string | null;
@@ -164,6 +164,11 @@ export default function ChatPage() {
     refetchInterval: 30000,
   });
 
+  const { data: feedbackData } = useQuery<PersonaFeedbackResponse>({
+    queryKey: ["/api/persona-feedback"],
+    refetchInterval: 30000,
+  });
+
   useEffect(() => {
     if (historyData?.messages) {
       setMessages(historyData.messages);
@@ -221,6 +226,7 @@ export default function ChatPage() {
       setMessages([]);
       queryClient.invalidateQueries({ queryKey: ["/api/history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/preferences"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/persona-feedback"] });
       inputRef.current?.focus();
     },
   });
@@ -313,6 +319,40 @@ export default function ChatPage() {
                     ))}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {feedbackData?.feedback && feedbackData.feedback.length > 0 && (
+              <div className="mt-4 pt-3 border-t" data-testid="container-persona-feedback">
+                <div className="flex items-center gap-2 mb-2">
+                  <User className="w-3.5 h-3.5 text-emerald-500" />
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Kesan Orang Lain</h4>
+                </div>
+                {Object.entries(
+                  feedbackData.feedback.reduce<Record<string, typeof feedbackData.feedback>>((acc, fb) => {
+                    if (!acc[fb.target]) acc[fb.target] = [];
+                    acc[fb.target].push(fb);
+                    return acc;
+                  }, {})
+                ).map(([target, items]) => {
+                  const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
+                  const config = target === "dr" ? PERSONA_CONFIG.dr : target === "broto" ? PERSONA_CONFIG.broto : target === "rara" ? PERSONA_CONFIG.rara : PERSONA_CONFIG.rere;
+                  return (
+                    <div key={target} className="mb-2" data-testid={`feedback-group-${target}`}>
+                      <p className={`text-[11px] font-semibold mb-1 ${config.textClass}`}>{label}</p>
+                      {items.map((item) => (
+                        <div key={item.id} className="flex items-start gap-2 py-0.5" data-testid={`feedback-item-${item.id}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                            item.sentiment === "positive" ? "bg-emerald-400" :
+                            item.sentiment === "negative" ? "bg-red-400" :
+                            item.sentiment === "mixed" ? "bg-amber-400" : "bg-muted-foreground/50"
+                          }`} />
+                          <p className="text-xs leading-relaxed">{item.feedback}</p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
