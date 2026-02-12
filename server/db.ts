@@ -395,4 +395,29 @@ export function clearConversationTags(userId: string) {
   db.prepare(`DELETE FROM conversation_tags WHERE user_id = ?`).run(userId);
 }
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+export function getSetting(key: string): string | null {
+  const row = db.prepare(`SELECT value FROM app_settings WHERE key = ?`).get(key) as { value: string } | undefined;
+  return row?.value || null;
+}
+
+export function setSetting(key: string, value: string) {
+  db.prepare(`INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run(key, value);
+}
+
+export function getPassword(type: "owner" | "contributor"): string | null {
+  const dbVal = getSetting(`${type}_password`);
+  if (dbVal) return dbVal;
+  if (type === "owner") return process.env.OWNER_PASSWORD || null;
+  if (type === "contributor") return process.env.CONTRIBUTOR_PASSWORD || null;
+  return null;
+}
+
 export default db;

@@ -24,6 +24,8 @@ import {
   saveConversationTag,
   getConversationTags,
   clearConversationTags,
+  getPassword,
+  setSetting,
 } from "./db";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -872,8 +874,8 @@ export async function registerRoutes(
   app.post("/api/login", (req, res) => {
     try {
       const { password } = req.body;
-      const ownerPassword = process.env.OWNER_PASSWORD;
-      const contributorPassword = process.env.CONTRIBUTOR_PASSWORD;
+      const ownerPassword = getPassword("owner");
+      const contributorPassword = getPassword("contributor");
 
       if (ownerPassword && password === ownerPassword) {
         req.session.isOwner = true;
@@ -914,6 +916,51 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Session info error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/contributor-enrichments", (req, res) => {
+    try {
+      if (req.session.isOwner !== true) {
+        return res.status(403).json({ message: "Owner only" });
+      }
+      const enrichments = getProfileEnrichments("contributor_shared");
+      return res.json({ enrichments });
+    } catch (err: any) {
+      console.error("Contributor enrichments API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/change-password", (req, res) => {
+    try {
+      if (req.session.isOwner !== true) {
+        return res.status(403).json({ success: false, message: "Owner only" });
+      }
+      const { type, currentPassword, newPassword } = req.body;
+      if (!type || !["owner", "contributor"].includes(type)) {
+        return res.status(400).json({ success: false, message: "Tipe password tidak valid" });
+      }
+      if (!newPassword || newPassword.length < 4) {
+        return res.status(400).json({ success: false, message: "Password baru minimal 4 karakter" });
+      }
+      if (type === "owner") {
+        if (!currentPassword) {
+          return res.status(400).json({ success: false, message: "Password lama harus diisi" });
+        }
+        const currentOwnerPw = getPassword("owner");
+        if (currentOwnerPw && currentPassword !== currentOwnerPw) {
+          return res.status(401).json({ success: false, message: "Password lama salah" });
+        }
+        if (!currentOwnerPw) {
+          return res.status(400).json({ success: false, message: "Password owner belum dikonfigurasi" });
+        }
+      }
+      setSetting(`${type}_password`, newPassword);
+      return res.json({ success: true, message: `Password ${type === "owner" ? "Owner" : "Contributor"} berhasil diubah` });
+    } catch (err: any) {
+      console.error("Change password error:", err?.message || err);
+      return res.status(500).json({ success: false, message: "Internal server error" });
     }
   });
 

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download, KeyRound, Users, Settings, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
 
@@ -248,6 +248,13 @@ export default function ChatPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [pwType, setPwType] = useState<"owner" | "contributor">("owner");
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -293,6 +300,12 @@ export default function ChatPage() {
   const { data: enrichmentData } = useQuery<ProfileEnrichmentsResponse>({
     queryKey: ["/api/profile-enrichments"],
     refetchInterval: 30000,
+  });
+
+  const { data: contributorEnrichmentData } = useQuery<ProfileEnrichmentsResponse>({
+    queryKey: ["/api/contributor-enrichments"],
+    refetchInterval: 30000,
+    enabled: isOwner,
   });
 
   useEffect(() => {
@@ -399,6 +412,38 @@ export default function ChatPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/history"] });
     } catch {}
   }, []);
+
+  const handleChangePassword = useCallback(async () => {
+    setPwError("");
+    setPwSuccess("");
+    if (!pwNew || pwNew.length < 4) {
+      setPwError("Password baru minimal 4 karakter");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwError("Konfirmasi password tidak cocok");
+      return;
+    }
+    try {
+      const res = await fetch("/api/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: pwType, currentPassword: pwCurrent, newPassword: pwNew }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPwSuccess(data.message);
+        setPwCurrent("");
+        setPwNew("");
+        setPwConfirm("");
+      } else {
+        setPwError(data.message || "Gagal mengubah password");
+      }
+    } catch {
+      setPwError("Gagal koneksi ke server");
+    }
+  }, [pwType, pwCurrent, pwNew, pwConfirm]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -767,15 +812,27 @@ export default function ChatPage() {
             </Button>
           )}
           {isOwner && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowPrefs(!showPrefs)}
-              className={`toggle-elevate ${showPrefs ? "toggle-elevated" : ""}`}
-              data-testid="button-show-preferences"
-            >
-              <Lightbulb className="w-4 h-4" />
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowPrefs(!showPrefs)}
+                className={`toggle-elevate ${showPrefs ? "toggle-elevated" : ""}`}
+                data-testid="button-show-preferences"
+              >
+                <Lightbulb className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => { setShowPasswordPanel(!showPasswordPanel); setPwError(""); setPwSuccess(""); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }}
+                className={`toggle-elevate ${showPasswordPanel ? "toggle-elevated" : ""}`}
+                data-testid="button-show-settings"
+                title="Pengaturan"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            </>
           )}
           <div className="relative" ref={downloadMenuRef}>
             <Button
@@ -914,6 +971,34 @@ export default function ChatPage() {
                 </div>
               )}
 
+              {contributorEnrichmentData?.enrichments && contributorEnrichmentData.enrichments.length > 0 && (
+                <div className="mt-4 pt-3 border-t" data-testid="container-contributor-enrichments">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-3.5 h-3.5 text-amber-500" />
+                    <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Insight dari Contributor</h4>
+                  </div>
+                  {Object.entries(
+                    contributorEnrichmentData.enrichments.reduce<Record<string, typeof contributorEnrichmentData.enrichments>>((acc, e) => {
+                      if (!acc[e.category]) acc[e.category] = [];
+                      acc[e.category].push(e);
+                      return acc;
+                    }, {})
+                  ).map(([category, items]) => (
+                    <div key={category} className="mb-2" data-testid={`contributor-enrichment-group-${category}`}>
+                      <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                        {ENRICHMENT_LABELS[category] || category}
+                      </p>
+                      {items.map((item) => (
+                        <div key={item.id} className="flex items-start gap-2 py-0.5" data-testid={`contributor-enrichment-item-${item.id}`}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400/60 mt-1.5 shrink-0" />
+                          <p className="text-[13px] sm:text-xs leading-relaxed">{item.fact}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {feedbackData?.feedback && feedbackData.feedback.length > 0 && (
                 <div className="mt-4 pt-3 border-t" data-testid="container-persona-feedback">
                   <div className="flex items-center gap-2 mb-2">
@@ -947,6 +1032,84 @@ export default function ChatPage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPasswordPanel && isOwner && (
+        <div className="fixed inset-0 z-50 sm:relative sm:inset-auto sm:z-auto flex flex-col bg-background sm:bg-card/50 sm:border-b sm:max-h-[50vh] pt-[env(safe-area-inset-top,0px)] sm:pt-0" data-testid="panel-settings">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b sm:border-b-0 shrink-0">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold" data-testid="text-settings-title">Ubah Password</h3>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setShowPasswordPanel(false)} data-testid="button-close-settings">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-4 sm:pb-3">
+            <div className="max-w-sm mx-auto space-y-4">
+              <div className="flex gap-2">
+                <Button
+                  variant={pwType === "owner" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setPwType("owner"); setPwError(""); setPwSuccess(""); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }}
+                  data-testid="button-pw-type-owner"
+                >
+                  Password Owner
+                </Button>
+                <Button
+                  variant={pwType === "contributor" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setPwType("contributor"); setPwError(""); setPwSuccess(""); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }}
+                  data-testid="button-pw-type-contributor"
+                >
+                  Password Contributor
+                </Button>
+              </div>
+              {pwType === "owner" && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Password lama</label>
+                  <Input
+                    type="password"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    placeholder="Masukkan password lama"
+                    data-testid="input-pw-current"
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Password baru</label>
+                <Input
+                  type="password"
+                  value={pwNew}
+                  onChange={(e) => setPwNew(e.target.value)}
+                  placeholder="Minimal 4 karakter"
+                  data-testid="input-pw-new"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Konfirmasi password baru</label>
+                <Input
+                  type="password"
+                  value={pwConfirm}
+                  onChange={(e) => setPwConfirm(e.target.value)}
+                  placeholder="Ulangi password baru"
+                  data-testid="input-pw-confirm"
+                />
+              </div>
+              {pwError && <p className="text-xs text-destructive" data-testid="text-pw-error">{pwError}</p>}
+              {pwSuccess && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400" data-testid="text-pw-success">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{pwSuccess}</span>
+                </div>
+              )}
+              <Button onClick={handleChangePassword} size="sm" data-testid="button-submit-pw">
+                Simpan Password
+              </Button>
             </div>
           </div>
         </div>
