@@ -465,7 +465,7 @@ function detectDRIdentity(message: string): boolean {
   return patterns.some((p) => p.test(lower));
 }
 
-async function extractProfileEnrichment(userMessage: string) {
+async function extractProfileEnrichment(userId: string, userMessage: string) {
   const prompt = `Kamu adalah sistem ekstraksi profil untuk DARVIS. Analisis pesan berikut dan ekstrak fakta-fakta personal tentang DR (Dian Ramadhan) yang disampaikan.
 
 Pesan: "${userMessage}"
@@ -517,7 +517,7 @@ Respond ONLY with valid JSON array.`;
       }));
 
     if (validItems.length > 0) {
-      bulkSaveProfileEnrichments(validItems);
+      bulkSaveProfileEnrichments(userId, validItems);
       console.log(`Profile enrichment: captured ${validItems.length} fact(s) about DR`);
     }
   } catch (err: any) {
@@ -525,7 +525,7 @@ Respond ONLY with valid JSON array.`;
   }
 }
 
-async function extractPersonaFeedback(userMessage: string, assistantReply: string) {
+async function extractPersonaFeedback(userId: string, userMessage: string, assistantReply: string) {
   const prompt = `Kamu adalah sistem pendeteksi feedback persona. Analisis pesan berikut dan cek apakah ada penilaian/pendapat/cerita tentang DR, Broto, Rara, atau Rere.
 
 Pesan user: "${userMessage}"
@@ -583,7 +583,7 @@ Respond ONLY with valid JSON array.`;
       }));
 
     if (validItems.length > 0) {
-      bulkSavePersonaFeedback(validItems);
+      bulkSavePersonaFeedback(userId, validItems);
       console.log(`Passive listening: captured ${validItems.length} persona feedback(s)`);
     }
   } catch (err: any) {
@@ -625,8 +625,8 @@ export async function registerRoutes(
       const userId = getUserId(req);
       clearHistory(userId);
       clearPreferences(userId);
-      clearPersonaFeedback();
-      clearProfileEnrichments();
+      clearPersonaFeedback(userId);
+      clearProfileEnrichments(userId);
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Clear API error:", err?.message || err);
@@ -634,9 +634,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/persona-feedback", (_req, res) => {
+  app.get("/api/persona-feedback", (req, res) => {
     try {
-      const feedback = getPersonaFeedback();
+      const userId = getUserId(req);
+      const feedback = getPersonaFeedback(userId);
       return res.json({ feedback });
     } catch (err: any) {
       console.error("Persona feedback API error:", err?.message || err);
@@ -644,9 +645,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/profile-enrichments", (_req, res) => {
+  app.get("/api/profile-enrichments", (req, res) => {
     try {
-      const enrichments = getProfileEnrichments();
+      const userId = getUserId(req);
+      const enrichments = getProfileEnrichments(userId);
       return res.json({ enrichments });
     } catch (err: any) {
       console.error("Profile enrichments API error:", err?.message || err);
@@ -838,7 +840,7 @@ export async function registerRoutes(
         }
       }
 
-      const personaFeedbacks = getPersonaFeedback();
+      const personaFeedbacks = getPersonaFeedback(userId);
       if (personaFeedbacks.length > 0) {
         const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
         for (const fb of personaFeedbacks) {
@@ -860,7 +862,7 @@ export async function registerRoutes(
         systemContent += fbBlock;
       }
 
-      const profileEnrichments = getProfileEnrichments();
+      const profileEnrichments = getProfileEnrichments(userId);
       if (profileEnrichments.length > 0) {
         const grouped: Record<string, string[]> = {};
         for (const e of profileEnrichments) {
@@ -979,13 +981,13 @@ export async function registerRoutes(
         saveMessage(userId, "assistant", reply);
 
         if (detectPersonaMention(message)) {
-          extractPersonaFeedback(message, reply).catch((err) => {
+          extractPersonaFeedback(userId, message, reply).catch((err) => {
             console.error("Passive listening error:", err?.message || err);
           });
         }
 
         if (detectDRIdentity(message)) {
-          extractProfileEnrichment(message).catch((err) => {
+          extractProfileEnrichment(userId, message).catch((err) => {
             console.error("Profile enrichment error:", err?.message || err);
           });
         }

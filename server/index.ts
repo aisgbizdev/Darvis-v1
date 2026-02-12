@@ -30,15 +30,24 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const isProduction = process.env.NODE_ENV === "production";
+
+if (isProduction && !process.env.SESSION_SECRET) {
+  console.error("FATAL: SESSION_SECRET is required in production");
+  process.exit(1);
+}
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "darvis-fallback-secret",
     resave: false,
     saveUninitialized: true,
+    proxy: isProduction,
     cookie: {
       maxAge: 365 * 24 * 60 * 60 * 1000,
       httpOnly: true,
       sameSite: "lax",
+      secure: isProduction,
     },
   }),
 );

@@ -42,6 +42,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS persona_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'mas_dr',
     target TEXT NOT NULL CHECK(target IN ('dr', 'broto', 'rara', 'rere')),
     feedback TEXT NOT NULL,
     sentiment TEXT NOT NULL DEFAULT 'neutral' CHECK(sentiment IN ('positive', 'negative', 'neutral', 'mixed')),
@@ -52,6 +53,32 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_persona_feedback_target ON persona_feedback(target);
 `);
+
+try {
+  db.exec(`ALTER TABLE persona_feedback ADD COLUMN user_id TEXT NOT NULL DEFAULT 'mas_dr'`);
+} catch (_e) {}
+
+db.exec(`CREATE INDEX IF NOT EXISTS idx_persona_feedback_user_id ON persona_feedback(user_id)`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS profile_enrichments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'mas_dr',
+    category TEXT NOT NULL,
+    fact TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.8,
+    source_quote TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_profile_enrichments_category ON profile_enrichments(category);
+`);
+
+try {
+  db.exec(`ALTER TABLE profile_enrichments ADD COLUMN user_id TEXT NOT NULL DEFAULT 'mas_dr'`);
+} catch (_e) {}
+
+db.exec(`CREATE INDEX IF NOT EXISTS idx_profile_enrichments_user_id ON profile_enrichments(user_id)`);
 
 export function getLastMessages(userId: string, limit: number = 10) {
   const stmt = db.prepare(`
@@ -180,6 +207,7 @@ export function clearPreferences(userId: string) {
 
 export interface PersonaFeedback {
   id: number;
+  user_id: string;
   target: string;
   feedback: string;
   sentiment: string;
@@ -188,14 +216,15 @@ export interface PersonaFeedback {
   created_at: string;
 }
 
-export function getPersonaFeedback(target?: string): PersonaFeedback[] {
+export function getPersonaFeedback(userId: string, target?: string): PersonaFeedback[] {
   if (target) {
-    return db.prepare(`SELECT * FROM persona_feedback WHERE target = ? ORDER BY confidence DESC, created_at DESC`).all(target) as PersonaFeedback[];
+    return db.prepare(`SELECT * FROM persona_feedback WHERE user_id = ? AND target = ? ORDER BY confidence DESC, created_at DESC`).all(userId, target) as PersonaFeedback[];
   }
-  return db.prepare(`SELECT * FROM persona_feedback ORDER BY target, confidence DESC, created_at DESC`).all() as PersonaFeedback[];
+  return db.prepare(`SELECT * FROM persona_feedback WHERE user_id = ? ORDER BY target, confidence DESC, created_at DESC`).all(userId) as PersonaFeedback[];
 }
 
 export function savePersonaFeedback(
+  userId: string,
   target: string,
   feedback: string,
   sentiment: string,
@@ -203,8 +232,8 @@ export function savePersonaFeedback(
   sourceContext: string | null
 ) {
   const existing = db.prepare(`
-    SELECT id FROM persona_feedback WHERE target = ? AND feedback = ?
-  `).get(target, feedback) as { id: number } | undefined;
+    SELECT id FROM persona_feedback WHERE user_id = ? AND target = ? AND feedback = ?
+  `).get(userId, target, feedback) as { id: number } | undefined;
 
   if (existing) {
     db.prepare(`
@@ -212,24 +241,25 @@ export function savePersonaFeedback(
     `).run(confidence, sentiment, sourceContext, existing.id);
   } else {
     db.prepare(`
-      INSERT INTO persona_feedback (target, feedback, sentiment, confidence, source_context) VALUES (?, ?, ?, ?, ?)
-    `).run(target, feedback, sentiment, confidence, sourceContext);
+      INSERT INTO persona_feedback (user_id, target, feedback, sentiment, confidence, source_context) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, target, feedback, sentiment, confidence, sourceContext);
   }
 }
 
 export function bulkSavePersonaFeedback(
+  userId: string,
   items: { target: string; feedback: string; sentiment: string; confidence: number; source_context: string | null }[]
 ) {
   const transaction = db.transaction(() => {
     for (const item of items) {
-      savePersonaFeedback(item.target, item.feedback, item.sentiment, item.confidence, item.source_context);
+      savePersonaFeedback(userId, item.target, item.feedback, item.sentiment, item.confidence, item.source_context);
     }
   });
   transaction();
 }
 
-export function clearPersonaFeedback() {
-  db.prepare(`DELETE FROM persona_feedback`).run();
+export function clearPersonaFeedback(userId: string) {
+  db.prepare(`DELETE FROM persona_feedback WHERE user_id = ?`).run(userId);
 }
 
 export function getPreferenceCount(userId: string): number {
@@ -237,21 +267,9 @@ export function getPreferenceCount(userId: string): number {
   return row.count;
 }
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS profile_enrichments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL,
-    fact TEXT NOT NULL,
-    confidence REAL NOT NULL DEFAULT 0.8,
-    source_quote TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_profile_enrichments_category ON profile_enrichments(category);
-`);
-
 export interface ProfileEnrichment {
   id: number;
+  user_id: string;
   category: string;
   fact: string;
   confidence: number;
@@ -259,19 +277,20 @@ export interface ProfileEnrichment {
   created_at: string;
 }
 
-export function getProfileEnrichments(): ProfileEnrichment[] {
-  return db.prepare(`SELECT * FROM profile_enrichments ORDER BY category, confidence DESC, created_at DESC`).all() as ProfileEnrichment[];
+export function getProfileEnrichments(userId: string): ProfileEnrichment[] {
+  return db.prepare(`SELECT * FROM profile_enrichments WHERE user_id = ? ORDER BY category, confidence DESC, created_at DESC`).all(userId) as ProfileEnrichment[];
 }
 
 export function saveProfileEnrichment(
+  userId: string,
   category: string,
   fact: string,
   confidence: number,
   sourceQuote: string | null
 ) {
   const existing = db.prepare(`
-    SELECT id FROM profile_enrichments WHERE category = ? AND fact = ?
-  `).get(category, fact) as { id: number } | undefined;
+    SELECT id FROM profile_enrichments WHERE user_id = ? AND category = ? AND fact = ?
+  `).get(userId, category, fact) as { id: number } | undefined;
 
   if (existing) {
     db.prepare(`
@@ -279,24 +298,25 @@ export function saveProfileEnrichment(
     `).run(confidence, sourceQuote, existing.id);
   } else {
     db.prepare(`
-      INSERT INTO profile_enrichments (category, fact, confidence, source_quote) VALUES (?, ?, ?, ?)
-    `).run(category, fact, confidence, sourceQuote);
+      INSERT INTO profile_enrichments (user_id, category, fact, confidence, source_quote) VALUES (?, ?, ?, ?, ?)
+    `).run(userId, category, fact, confidence, sourceQuote);
   }
 }
 
 export function bulkSaveProfileEnrichments(
+  userId: string,
   items: { category: string; fact: string; confidence: number; source_quote: string | null }[]
 ) {
   const transaction = db.transaction(() => {
     for (const item of items) {
-      saveProfileEnrichment(item.category, item.fact, item.confidence, item.source_quote);
+      saveProfileEnrichment(userId, item.category, item.fact, item.confidence, item.source_quote);
     }
   });
   transaction();
 }
 
-export function clearProfileEnrichments() {
-  db.prepare(`DELETE FROM profile_enrichments`).run();
+export function clearProfileEnrichments(userId: string) {
+  db.prepare(`DELETE FROM profile_enrichments WHERE user_id = ?`).run(userId);
 }
 
 export default db;
