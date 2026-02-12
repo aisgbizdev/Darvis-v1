@@ -803,6 +803,56 @@ Respond ONLY with valid JSON array.`;
   }
 }
 
+function redactOwnerIdentity(text: string): string {
+  const patterns = [
+    /\bmas\s+DR\b/gi,
+    /\bmas\s+Dian\b/gi,
+    /\bDian\s+Ramadhan\b/gi,
+    /\bBapak\b/gi,
+    /\bBapa\b/gi,
+    /\bAbah\b/gi,
+    /\bYKW\b/gi,
+    /\bRaha\b/gi,
+  ];
+
+  let result = text;
+  for (const pattern of patterns) {
+    result = result.replace(pattern, (match) => {
+      if (/^(bapak|bapa)$/i.test(match)) return "kamu";
+      return "";
+    });
+  }
+
+  result = result
+    .replace(/,\s*,/g, ",")
+    .replace(/\.\s*\./g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return result;
+}
+
+function mergePersonasToUnifiedVoice(text: string): string {
+  const brotoMatch = text.match(/Broto:\s*([\s\S]*?)(?=\n\s*(?:Rara|Rere|DR)\s*:|$)/i);
+  const raraMatch = text.match(/Rara:\s*([\s\S]*?)(?=\n\s*(?:Rere|DR)\s*:|$)/i);
+  const rereMatch = text.match(/Rere:\s*([\s\S]*?)(?=\n\s*DR\s*:|$)/i);
+  const drMatch = text.match(/DR:\s*([\s\S]*?)$/i);
+
+  const hasLabels = brotoMatch || raraMatch || rereMatch || drMatch;
+  if (!hasLabels) {
+    return redactOwnerIdentity(text);
+  }
+
+  const parts: string[] = [];
+  if (brotoMatch && brotoMatch[1].trim()) parts.push(brotoMatch[1].trim());
+  if (raraMatch && raraMatch[1].trim()) parts.push(raraMatch[1].trim());
+  if (rereMatch && rereMatch[1].trim()) parts.push(rereMatch[1].trim());
+  if (drMatch && drMatch[1].trim()) parts.push(drMatch[1].trim());
+
+  const merged = parts.join("\n\n");
+  return redactOwnerIdentity(merged);
+}
+
 function getUserId(req: any): string {
   if (!req.session.userId) {
     req.session.userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -814,6 +864,44 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.post("/api/owner-login", (req, res) => {
+    try {
+      const { password } = req.body;
+      const ownerPassword = process.env.OWNER_PASSWORD;
+      if (!ownerPassword) {
+        return res.status(500).json({ success: false, message: "Owner password not configured" });
+      }
+      if (password === ownerPassword) {
+        req.session.isOwner = true;
+        return res.json({ success: true, mode: "mirror" });
+      }
+      return res.status(401).json({ success: false, message: "Invalid password" });
+    } catch (err: any) {
+      console.error("Owner login error:", err?.message || err);
+      return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/owner-logout", (req, res) => {
+    try {
+      req.session.isOwner = false;
+      return res.json({ success: true, mode: "twin" });
+    } catch (err: any) {
+      console.error("Owner logout error:", err?.message || err);
+      return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/session-info", (req, res) => {
+    try {
+      const isOwner = req.session.isOwner === true;
+      return res.json({ isOwner, mode: isOwner ? "mirror" : "twin" });
+    } catch (err: any) {
+      console.error("Session info error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   app.get("/api/history", (req, res) => {
     try {
@@ -928,6 +1016,7 @@ export async function registerRoutes(
   app.post("/api/chat", async (req, res) => {
     try {
       const userId = getUserId(req);
+      const isOwner = req.session.isOwner === true;
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid request body" });
@@ -944,7 +1033,7 @@ export async function registerRoutes(
       const drProfile = readPromptFile("DARVIS_PROFILE_DR.md");
 
       const nodesUsed: string[] = [];
-      const isMultiPersonaMode = detectMultiPersonaIntent(message);
+      const isMultiPersonaMode = isOwner ? detectMultiPersonaIntent(message) : false;
       const isDecisionFast = detectDecisionFastMode(message);
       const isStrategicEscalation = detectStrategicEscalation(message);
       const tone = detectConversationTone(message);
@@ -952,12 +1041,18 @@ export async function registerRoutes(
       const decisionType = classifyDecisionType(message);
       let systemContent = corePrompt;
 
+      if (isOwner) {
+        systemContent += `\n\n---\nPRESENTATION MODE: MIRROR (Owner aktif)\nUser adalah owner. Sapaan natural: "mas DR", "lo", dll. Tone bisa lebih tajam.`;
+      } else {
+        systemContent += `\n\n---\nPRESENTATION MODE: TWIN (User umum)\nUser BUKAN owner. JANGAN PERNAH menyebut "mas DR", "Bapak", "Bapa", "Abah", "YKW", "Raha", "Dian Ramadhan", atau identitas personal owner dalam respons. Gunakan sapaan umum: "kamu", "lo". Framework berpikir tetap sama, tapi TANPA referensi personal ke owner.`;
+      }
+
       if (isMultiPersonaMode) {
         systemContent += `\n\n---\nMODE AKTIF: MULTI-PERSONA\nUser meminta pendapat dari perspektif persona. Gunakan format 4 suara:\nBroto: ...\nRara: ...\nRere: ...\nDR: ...\nMasing-masing persona HARUS punya sudut pandang BERBEDA. Urutan: Broto → Rara → Rere → DR.`;
       } else if (isDecisionFast) {
         systemContent += `\n\n---\nMODE AKTIF: DECISION FAST MODE\nUser minta respons cepat/ringkas. Gunakan format:\n- 3 poin utama (bullet)\n- 1 risiko terbesar\n- 1 blind spot yang mungkin terlewat\n- 1 aksi minimal yang bisa dilakukan sekarang\n\nTidak ada narasi panjang. Langsung struktur. Tetap integrasikan 4 perspektif secara implisit.`;
       } else {
-        systemContent += `\n\n---\nMODE AKTIF: SATU SUARA DARVIS\nJawab sebagai SATU SUARA terpadu. JANGAN gunakan label "Broto:", "Rara:", "Rere:", "DR:" dalam output. Integrasikan semua perspektif (logika, refleksi, kreativitas, pengalaman DR) menjadi satu narasi koheren. Gaya: santai, to the point, seperti ngobrol sama teman yang smart.`;
+        systemContent += `\n\n---\nMODE AKTIF: SATU SUARA DARVIS\nJawab sebagai SATU SUARA terpadu. JANGAN gunakan label "Broto:", "Rara:", "Rere:", "DR:" dalam output. Integrasikan semua perspektif (logika, refleksi, kreativitas, pengalaman) menjadi satu narasi koheren. Gaya: santai, to the point, seperti ngobrol sama teman yang smart.`;
       }
 
       const CONTEXT_MODE_FRAMINGS: Record<ContextMode, string> = {
@@ -1214,15 +1309,22 @@ export async function registerRoutes(
         }
         clearTimeout(timeout);
 
+        const presentationMode = isOwner ? "mirror" : "twin";
         let reply: string;
         if (!fullReply.trim()) {
           reply = isMultiPersonaMode
             ? "Broto: Maaf mas DR, saya butuh waktu untuk memproses pertanyaan ini. Bisa coba ulangi?\n\nRara: Tenang mas DR, kadang perlu pendekatan berbeda. Coba sampaikan pertanyaan dengan cara lain ya.\n\nRere: Mungkin coba tanya dari sudut yang berbeda, kadang itu bantu.\n\nDR: Gw juga kadang gitu — coba rephrase aja, biar kita bisa jalan lagi."
             : "Maaf, gw butuh waktu untuk memproses pertanyaan ini. Coba ulangi atau rephrase ya.";
-          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode, fullReply: reply })}\n\n`);
+          if (!isOwner) {
+            reply = mergePersonasToUnifiedVoice(reply);
+          }
+          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode, presentationMode, fullReply: reply })}\n\n`);
         } else {
           reply = enforceFormat(fullReply, isMultiPersonaMode);
-          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode })}\n\n`);
+          if (!isOwner) {
+            reply = mergePersonasToUnifiedVoice(reply);
+          }
+          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode, presentationMode, fullReply: !isOwner ? reply : undefined })}\n\n`);
         }
         res.end();
 

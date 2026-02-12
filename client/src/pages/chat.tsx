@@ -4,7 +4,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut } from "lucide-react";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
 
 interface ParsedVoices {
@@ -89,8 +90,8 @@ function PersonaCard({ persona, content, index }: { persona: keyof typeof PERSON
   );
 }
 
-function AssistantBubble({ content, index }: { content: string; index: number }) {
-  const parsed = parseQuadVoice(content);
+function AssistantBubble({ content, index, isOwner }: { content: string; index: number; isOwner: boolean }) {
+  const parsed = isOwner ? parseQuadVoice(content) : null;
 
   if (parsed && (parsed.broto || parsed.rara || parsed.rere || parsed.dr)) {
     return (
@@ -205,10 +206,24 @@ export default function ChatPage() {
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [isOwner, setIsOwner] = useState(false);
+  const [showOwnerLogin, setShowOwnerLogin] = useState(false);
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: sessionData } = useQuery<{ isOwner: boolean; mode: string }>({
+    queryKey: ["/api/session-info"],
+  });
+
+  useEffect(() => {
+    if (sessionData) {
+      setIsOwner(sessionData.isOwner);
+    }
+  }, [sessionData]);
 
   const { data: historyData, isLoading: historyLoading } = useQuery<HistoryResponse>({
     queryKey: ["/api/history"],
@@ -295,6 +310,39 @@ export default function ChatPage() {
       setIsListening(true);
     }
   }, [isListening]);
+
+  const handleOwnerLogin = useCallback(async () => {
+    setLoginError("");
+    try {
+      const res = await fetch("/api/owner-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: ownerPassword }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsOwner(true);
+        setShowOwnerLogin(false);
+        setOwnerPassword("");
+        queryClient.invalidateQueries({ queryKey: ["/api/session-info"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+      } else {
+        setLoginError(data.message || "Password salah");
+      }
+    } catch {
+      setLoginError("Gagal koneksi ke server");
+    }
+  }, [ownerPassword]);
+
+  const handleOwnerLogout = useCallback(async () => {
+    try {
+      await fetch("/api/owner-logout", { method: "POST", credentials: "include" });
+      setIsOwner(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/session-info"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+    } catch {}
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -482,19 +530,45 @@ export default function ChatPage() {
           <img src="/darvis-logo.png" alt="DARVIS" className="w-7 h-7 sm:w-8 sm:h-8 rounded-md object-cover" />
           <div>
             <h1 className="text-sm font-bold tracking-tight leading-none" data-testid="text-app-title">DARVIS</h1>
-            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">Thinking Companion v0.3</p>
+            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">
+              {isOwner ? "Mirror Mode" : "Thinking Companion"} v2.0
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowPrefs(!showPrefs)}
-            className={`toggle-elevate ${showPrefs ? "toggle-elevated" : ""}`}
-            data-testid="button-show-preferences"
-          >
-            <Lightbulb className="w-4 h-4" />
-          </Button>
+          {isOwner ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleOwnerLogout}
+              data-testid="button-owner-logout"
+              title="Logout Mirror Mode"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowOwnerLogin(!showOwnerLogin)}
+              className={`toggle-elevate ${showOwnerLogin ? "toggle-elevated" : ""}`}
+              data-testid="button-owner-login"
+              title="Owner Login"
+            >
+              <Lock className="w-4 h-4" />
+            </Button>
+          )}
+          {isOwner && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowPrefs(!showPrefs)}
+              className={`toggle-elevate ${showPrefs ? "toggle-elevated" : ""}`}
+              data-testid="button-show-preferences"
+            >
+              <Lightbulb className="w-4 h-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -507,7 +581,31 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {showPrefs && (
+      {showOwnerLogin && !isOwner && (
+        <div className="border-b px-4 py-3 bg-card/50" data-testid="panel-owner-login">
+          <div className="max-w-sm mx-auto flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">Masukkan password owner untuk Mirror Mode</p>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="Owner password"
+                value={ownerPassword}
+                onChange={(e) => setOwnerPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleOwnerLogin(); }}
+                data-testid="input-owner-password"
+              />
+              <Button onClick={handleOwnerLogin} data-testid="button-submit-owner-login">
+                Masuk
+              </Button>
+            </div>
+            {loginError && (
+              <p className="text-xs text-destructive" data-testid="text-login-error">{loginError}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showPrefs && isOwner && (
         <div className="fixed inset-0 z-50 sm:relative sm:inset-auto sm:z-auto flex flex-col bg-background sm:bg-card/50 sm:border-b sm:max-h-[40vh] pt-[env(safe-area-inset-top,0px)] sm:pt-0" data-testid="panel-preferences">
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b sm:border-b-0 shrink-0">
             <div className="flex items-center gap-2">
@@ -627,14 +725,23 @@ export default function ChatPage() {
               <img src="/darvis-logo.png" alt="DARVIS" className="w-12 h-12 sm:w-14 sm:h-14 rounded-md object-cover mb-3 sm:mb-4" />
               <h2 className="text-base font-semibold mb-1" data-testid="text-greeting">DARVIS</h2>
               <p className="text-[13px] sm:text-sm text-muted-foreground max-w-[280px] sm:max-w-xs" data-testid="text-tagline">
-                Thinking companion. Ceritakan apa yang lagi lo pikirin, kita bedah bareng.
+                {isOwner
+                  ? "Mirror Mode aktif. Ceritakan apa yang lagi lo pikirin, kita bedah bareng."
+                  : "Framework berpikir untuk pengambilan keputusan. Ambil framework-nya, bukan figurnya."}
               </p>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 justify-center mt-5 sm:mt-6 w-full max-w-sm sm:max-w-none px-4 sm:px-0">
-                {[
-                  "Bantu gw pikirin keputusan ini",
-                  "Sparring soal strategi dong",
-                  "Gw butuh sudut pandang lain",
-                ].map((q, i) => (
+                {(isOwner
+                  ? [
+                      "Bantu gw pikirin keputusan ini",
+                      "Sparring soal strategi dong",
+                      "Gw butuh sudut pandang lain",
+                    ]
+                  : [
+                      "Bantu saya pikirin keputusan ini",
+                      "Saya butuh framework untuk strategi",
+                      "Kasih perspektif dari sudut lain",
+                    ]
+                ).map((q, i) => (
                   <button
                     key={q}
                     onClick={() => {
@@ -655,12 +762,12 @@ export default function ChatPage() {
             msg.role === "user" ? (
               <UserBubble key={i} content={msg.content} index={i} images={msg.images} />
             ) : (
-              <AssistantBubble key={i} content={msg.content} index={i} />
+              <AssistantBubble key={i} content={msg.content} index={i} isOwner={isOwner} />
             ),
           )}
 
           {isStreaming && streamingContent && (
-            <AssistantBubble content={streamingContent} index={messages.length} />
+            <AssistantBubble content={streamingContent} index={messages.length} isOwner={isOwner} />
           )}
           {isStreaming && !streamingContent && <TypingIndicator />}
           {!isStreaming && currentContextMode && currentContextMode !== "general" && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && (
