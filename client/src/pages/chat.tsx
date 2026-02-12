@@ -971,13 +971,17 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {contributorEnrichmentData?.enrichments && contributorEnrichmentData.enrichments.length > 0 && (
-                <div className="mt-4 pt-3 border-t" data-testid="container-contributor-enrichments">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-3.5 h-3.5 text-amber-500" />
-                    <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Insight dari Contributor</h4>
-                  </div>
-                  {Object.entries(
+              <div className="mt-4 pt-3 border-t" data-testid="container-contributor-enrichments">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="w-3.5 h-3.5 text-amber-500" />
+                  <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Insight dari Contributor</h4>
+                </div>
+                {(!contributorEnrichmentData?.enrichments || contributorEnrichmentData.enrichments.length === 0) ? (
+                  <p className="text-xs text-muted-foreground py-1" data-testid="text-contributor-empty">
+                    Belum ada insight dari contributor. Bagikan password contributor ke orang yang kenal DR untuk mulai mengumpulkan cerita.
+                  </p>
+                ) : (
+                  Object.entries(
                     contributorEnrichmentData.enrichments.reduce<Record<string, typeof contributorEnrichmentData.enrichments>>((acc, e) => {
                       if (!acc[e.category]) acc[e.category] = [];
                       acc[e.category].push(e);
@@ -995,9 +999,9 @@ export default function ChatPage() {
                         </div>
                       ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
 
               {feedbackData?.feedback && feedbackData.feedback.length > 0 && (
                 <div className="mt-4 pt-3 border-t" data-testid="container-persona-feedback">
