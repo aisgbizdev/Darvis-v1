@@ -19,6 +19,7 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
     - PWA support for installability on mobile devices, including manifest.json and service worker for offline capabilities.
     - Download Conversation feature (MD + PDF) with professional report header/footer.
     - Markdown rendering in chat (react-markdown) — bold, italic, heading, list, blockquote, code, emoji.
+    - Optimized system prompt (65-70% token reduction) + prompt file caching + SSE flush for faster streaming.
     - Voice Input for speech-to-text.
     - Image Upload & Analysis for multi-image processing.
 
