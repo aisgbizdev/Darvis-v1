@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download } from "lucide-react";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
 
 interface ParsedVoices {
@@ -210,10 +210,23 @@ export default function ChatPage() {
   const [showOwnerLogin, setShowOwnerLogin] = useState(false);
   const [ownerPassword, setOwnerPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showDownloadMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDownloadMenu]);
 
   const { data: sessionData } = useQuery<{ isOwner: boolean; mode: string }>({
     queryKey: ["/api/session-info"],
@@ -263,24 +276,22 @@ export default function ChatPage() {
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      let finalTranscript = "";
-
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interim = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        let finalTranscript = "";
+        let interimTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript + " ";
           } else {
-            interim = transcript;
+            interimTranscript += transcript;
           }
         }
-        setInput((finalTranscript + interim).trim());
+        setInput((finalTranscript + interimTranscript).trim());
       };
 
       recognition.onend = () => {
         setIsListening(false);
-        finalTranscript = "";
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -496,6 +507,86 @@ export default function ChatPage() {
     e.target.value = "";
   }, [addImages]);
 
+  const formatMessagesAsMD = useCallback((msgs: ChatMessage[]): string => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    let md = `# Percakapan DARVIS\n\n**Tanggal**: ${dateStr} ${timeStr}\n**Total pesan**: ${msgs.length}\n\n---\n\n`;
+    msgs.forEach((msg) => {
+      if (msg.role === "user") {
+        md += `### Kamu\n\n${msg.content}\n\n`;
+      } else {
+        md += `### DARVIS\n\n${msg.content}\n\n`;
+      }
+      md += "---\n\n";
+    });
+    return md;
+  }, []);
+
+  const formatMessagesAsPDFHTML = useCallback((msgs: ChatMessage[]): string => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Percakapan DARVIS</title><style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; font-size: 14px; line-height: 1.6; }
+      h1 { font-size: 20px; margin-bottom: 4px; }
+      .meta { color: #666; font-size: 12px; margin-bottom: 24px; }
+      .msg { margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; }
+      .user { background: #e8edf3; }
+      .assistant { background: #f8f8f8; border: 1px solid #e5e5e5; }
+      .role { font-weight: 600; font-size: 12px; margin-bottom: 4px; color: #555; }
+      .content { white-space: pre-wrap; }
+      hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
+      @media print { body { padding: 20px; } }
+    </style></head><body>
+    <h1>Percakapan DARVIS</h1>
+    <p class="meta">${dateStr} ${timeStr} &mdash; ${msgs.length} pesan</p><hr>`;
+    msgs.forEach((msg) => {
+      const roleLabel = msg.role === "user" ? "Kamu" : "DARVIS";
+      const cls = msg.role === "user" ? "user" : "assistant";
+      const escaped = msg.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      html += `<div class="msg ${cls}"><div class="role">${roleLabel}</div><div class="content">${escaped}</div></div>`;
+    });
+    html += `</body></html>`;
+    return html;
+  }, []);
+
+  const downloadFile = useCallback((content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleDownload = useCallback((format: "md" | "pdf", scope: "last" | "all") => {
+    setShowDownloadMenu(false);
+    const msgs = scope === "last"
+      ? (() => {
+          const lastUserIdx = messages.length - 1 - [...messages].reverse().findIndex((m) => m.role === "user");
+          return lastUserIdx >= 0 && lastUserIdx < messages.length ? messages.slice(lastUserIdx) : messages.slice(-2);
+        })()
+      : messages;
+    if (msgs.length === 0) return;
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    if (format === "md") {
+      downloadFile(formatMessagesAsMD(msgs), `darvis-${scope === "last" ? "terakhir" : "lengkap"}-${timestamp}.md`, "text/markdown;charset=utf-8");
+    } else {
+      const html = formatMessagesAsPDFHTML(msgs);
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => { printWindow.print(); }, 500);
+      }
+    }
+  }, [messages, formatMessagesAsMD, formatMessagesAsPDFHTML, downloadFile]);
+
   const handleSend = () => {
     const trimmed = input.trim();
     const hasContent = trimmed || attachedImages.length > 0;
@@ -569,6 +660,38 @@ export default function ChatPage() {
               <Lightbulb className="w-4 h-4" />
             </Button>
           )}
+          <div className="relative" ref={downloadMenuRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+              disabled={messages.length === 0}
+              className={`toggle-elevate ${showDownloadMenu ? "toggle-elevated" : ""}`}
+              data-testid="button-download"
+              title="Download percakapan"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+            {showDownloadMenu && (
+              <div className="absolute right-0 top-full mt-1 w-52 rounded-md border bg-card shadow-md z-50 py-1" data-testid="menu-download">
+                <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Percakapan Terakhir</p>
+                <button onClick={() => handleDownload("md", "last")} className="w-full text-left px-3 py-1.5 text-xs hover-elevate" data-testid="button-download-last-md">
+                  Markdown (.md)
+                </button>
+                <button onClick={() => handleDownload("pdf", "last")} className="w-full text-left px-3 py-1.5 text-xs hover-elevate" data-testid="button-download-last-pdf">
+                  PDF (print)
+                </button>
+                <div className="border-t my-1" />
+                <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Seluruh Percakapan</p>
+                <button onClick={() => handleDownload("md", "all")} className="w-full text-left px-3 py-1.5 text-xs hover-elevate" data-testid="button-download-all-md">
+                  Markdown (.md)
+                </button>
+                <button onClick={() => handleDownload("pdf", "all")} className="w-full text-left px-3 py-1.5 text-xs hover-elevate" data-testid="button-download-all-pdf">
+                  PDF (print)
+                </button>
+              </div>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="icon"
