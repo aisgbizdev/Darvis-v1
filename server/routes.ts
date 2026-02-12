@@ -869,30 +869,38 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/owner-login", (req, res) => {
+  app.post("/api/login", (req, res) => {
     try {
       const { password } = req.body;
       const ownerPassword = process.env.OWNER_PASSWORD;
-      if (!ownerPassword) {
-        return res.status(500).json({ success: false, message: "Owner password not configured" });
-      }
-      if (password === ownerPassword) {
+      const contributorPassword = process.env.CONTRIBUTOR_PASSWORD;
+
+      if (ownerPassword && password === ownerPassword) {
         req.session.isOwner = true;
+        req.session.isContributor = false;
         return res.json({ success: true, mode: "mirror" });
       }
-      return res.status(401).json({ success: false, message: "Invalid password" });
+
+      if (contributorPassword && password === contributorPassword) {
+        req.session.isContributor = true;
+        req.session.isOwner = false;
+        return res.json({ success: true, mode: "contributor" });
+      }
+
+      return res.status(401).json({ success: false, message: "Password salah" });
     } catch (err: any) {
-      console.error("Owner login error:", err?.message || err);
+      console.error("Login error:", err?.message || err);
       return res.status(500).json({ success: false, message: "Internal server error" });
     }
   });
 
-  app.post("/api/owner-logout", (req, res) => {
+  app.post("/api/logout", (req, res) => {
     try {
       req.session.isOwner = false;
+      req.session.isContributor = false;
       return res.json({ success: true, mode: "twin" });
     } catch (err: any) {
-      console.error("Owner logout error:", err?.message || err);
+      console.error("Logout error:", err?.message || err);
       return res.status(500).json({ success: false, message: "Internal server error" });
     }
   });
@@ -900,7 +908,9 @@ export async function registerRoutes(
   app.get("/api/session-info", (req, res) => {
     try {
       const isOwner = req.session.isOwner === true;
-      return res.json({ isOwner, mode: isOwner ? "mirror" : "twin" });
+      const isContributor = req.session.isContributor === true;
+      const mode = isOwner ? "mirror" : isContributor ? "contributor" : "twin";
+      return res.json({ isOwner, isContributor, mode });
     } catch (err: any) {
       console.error("Session info error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
@@ -1021,6 +1031,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const isOwner = req.session.isOwner === true;
+      const isContributor = req.session.isContributor === true;
       const parsed = chatRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid request body" });
@@ -1047,6 +1058,8 @@ export async function registerRoutes(
 
       if (isOwner) {
         systemContent += `\n\n---\nMODE: MIRROR (Owner). Sapaan: "mas DR"/"lo". Tone lebih tajam.`;
+      } else if (isContributor) {
+        systemContent += `\n\n---\nMODE: CONTRIBUTOR. User ini adalah orang yang mengenal DR secara personal. Sapaan: "kamu"/"lo". JANGAN tampilkan persona cards. Suara unified seperti Twin Mode. PENTING: Jika user menceritakan sesuatu tentang DR (kebiasaan, karakter, cerita, pendapat tentang DR), DENGARKAN dan RESPONSIF — tanyakan lebih dalam. User ini bisa jadi sumber insight berharga tentang DR.`;
       } else {
         systemContent += `\n\n---\nMODE: TWIN. JANGAN sebut DR/Bapak/Abah/YKW/Raha/identitas personal. Sapaan: "kamu"/"lo".`;
       }
@@ -1202,7 +1215,9 @@ export async function registerRoutes(
       }
 
       const rawEnrichments = getProfileEnrichments(userId);
-      const profileEnrichments = applyMemoryGovernor(rawEnrichments, 5);
+      const contributorEnrichments = getProfileEnrichments("contributor_shared");
+      const combinedEnrichments = [...rawEnrichments, ...contributorEnrichments];
+      const profileEnrichments = applyMemoryGovernor(combinedEnrichments, 5);
       if (profileEnrichments.length > 0) {
         const grouped: Record<string, string[]> = {};
         for (const e of profileEnrichments) {
@@ -1310,7 +1325,7 @@ export async function registerRoutes(
         }
         clearTimeout(timeout);
 
-        const presentationMode = isOwner ? "mirror" : "twin";
+        const presentationMode = isOwner ? "mirror" : isContributor ? "contributor" : "twin";
         let reply: string;
         if (!fullReply.trim()) {
           reply = isMultiPersonaMode
@@ -1325,7 +1340,7 @@ export async function registerRoutes(
           if (!isOwner) {
             reply = mergePersonasToUnifiedVoice(reply);
           }
-          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode, presentationMode, fullReply: !isOwner ? reply : undefined })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, contextMode, presentationMode, fullReply: (!isOwner || isContributor) ? reply : undefined })}\n\n`);
         }
         res.end();
 
@@ -1359,7 +1374,11 @@ export async function registerRoutes(
           });
         }
 
-        if (detectDRIdentity(message)) {
+        if (isContributor) {
+          extractProfileEnrichment("contributor_shared", message).catch((err) => {
+            console.error("Contributor enrichment error:", err?.message || err);
+          });
+        } else if (detectDRIdentity(message)) {
           extractProfileEnrichment(userId, message).catch((err) => {
             console.error("Profile enrichment error:", err?.message || err);
           });

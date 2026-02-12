@@ -33,10 +33,12 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
     - **Node System**: Modular context nodes (`NODE_SOLIDGROUP`, `NODE_BIAS`, `NODE_AiSG`, `NODE_NM`, `NODE_RISK_GUARD`, `NODE_COMPLIANCE`) injected based on intent detection. Priority: `NODE_BIAS` > `NODE_RISK_GUARD` > `NODE_NM` > other nodes.
     - **Context Mode Engine (v2.0)**: Auto-detects conversation context (strategic, tactical, reflection, crisis, general) via keyword patterns and injects a framing layer into the system prompt.
     - **Silent Tagging System (v2.0)**: Captures conversation metadata (context_mode, decision_type, emotional_tone, nodes_active, etc.) in `conversation_tags` table for future pattern detection.
-    - **Mirror/Twin Presentation Architecture (v2.0)**:
+    - **Mirror/Twin/Contributor Presentation Architecture (v2.0)**:
         - **Mirror Mode (Owner only)**: Full persona cards, sharper tone, owner identity references, preferences panel, profile enrichment.
         - **Twin Mode (Default for all users)**: Unified voice, no persona labels, no owner identity references, framework-first approach.
+        - **Contributor Mode (Password-protected)**: Unified voice like Twin, but DARVIS knows user kenal DR. Every message auto-extracted as profile enrichment → stored to shared pool (`contributor_shared`). Owner's prompt pulls from both own enrichments and contributor pool.
         - Server-side transformation (`mergePersonasToUnifiedVoice()`, `redactOwnerIdentity()`) to adapt output based on presentation mode.
+        - Single login field — password determines mode (Owner vs Contributor vs wrong).
     - **Persona System (v2.0)**:
         - Default unified voice, with multi-persona output activated on demand in Mirror Mode.
         - DR persona speaks like "mas DR" (Mirror only).

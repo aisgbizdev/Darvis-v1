@@ -17,6 +17,7 @@ declare module "express-session" {
   interface SessionData {
     userId: string;
     isOwner: boolean;
+    isContributor: boolean;
   }
 }
 

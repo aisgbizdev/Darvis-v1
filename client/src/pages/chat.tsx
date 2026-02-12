@@ -243,8 +243,9 @@ export default function ChatPage() {
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [isOwner, setIsOwner] = useState(false);
-  const [showOwnerLogin, setShowOwnerLogin] = useState(false);
-  const [ownerPassword, setOwnerPassword] = useState("");
+  const [isContributor, setIsContributor] = useState(false);
+  const [showLoginPanel, setShowLoginPanel] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -264,13 +265,14 @@ export default function ChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showDownloadMenu]);
 
-  const { data: sessionData } = useQuery<{ isOwner: boolean; mode: string }>({
+  const { data: sessionData } = useQuery<{ isOwner: boolean; isContributor: boolean; mode: string }>({
     queryKey: ["/api/session-info"],
   });
 
   useEffect(() => {
     if (sessionData) {
       setIsOwner(sessionData.isOwner);
+      setIsContributor(sessionData.isContributor);
     }
   }, [sessionData]);
 
@@ -358,20 +360,26 @@ export default function ChatPage() {
     }
   }, [isListening]);
 
-  const handleOwnerLogin = useCallback(async () => {
+  const handleLogin = useCallback(async () => {
     setLoginError("");
     try {
-      const res = await fetch("/api/owner-login", {
+      const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: ownerPassword }),
+        body: JSON.stringify({ password: loginPassword }),
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
-        setIsOwner(true);
-        setShowOwnerLogin(false);
-        setOwnerPassword("");
+        if (data.mode === "mirror") {
+          setIsOwner(true);
+          setIsContributor(false);
+        } else if (data.mode === "contributor") {
+          setIsContributor(true);
+          setIsOwner(false);
+        }
+        setShowLoginPanel(false);
+        setLoginPassword("");
         queryClient.invalidateQueries({ queryKey: ["/api/session-info"] });
         queryClient.invalidateQueries({ queryKey: ["/api/history"] });
       } else {
@@ -380,12 +388,13 @@ export default function ChatPage() {
     } catch {
       setLoginError("Gagal koneksi ke server");
     }
-  }, [ownerPassword]);
+  }, [loginPassword]);
 
-  const handleOwnerLogout = useCallback(async () => {
+  const handleLogout = useCallback(async () => {
     try {
-      await fetch("/api/owner-logout", { method: "POST", credentials: "include" });
+      await fetch("/api/logout", { method: "POST", credentials: "include" });
       setIsOwner(false);
+      setIsContributor(false);
       queryClient.invalidateQueries({ queryKey: ["/api/session-info"] });
       queryClient.invalidateQueries({ queryKey: ["/api/history"] });
     } catch {}
@@ -730,18 +739,18 @@ export default function ChatPage() {
           <div>
             <h1 className="text-sm font-bold tracking-tight leading-none" data-testid="text-app-title">DARVIS</h1>
             <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">
-              {isOwner ? "Mirror Mode" : "Thinking Companion"} v2.0
+              {isOwner ? "Mirror Mode" : isContributor ? "Contributor Mode" : "Thinking Companion"} v2.0
             </p>
           </div>
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1">
-          {isOwner ? (
+          {(isOwner || isContributor) ? (
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleOwnerLogout}
-              data-testid="button-owner-logout"
-              title="Logout Mirror Mode"
+              onClick={handleLogout}
+              data-testid="button-logout"
+              title={isOwner ? "Logout Mirror Mode" : "Logout Contributor Mode"}
             >
               <LogOut className="w-4 h-4" />
             </Button>
@@ -749,10 +758,10 @@ export default function ChatPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setShowOwnerLogin(!showOwnerLogin)}
-              className={`toggle-elevate ${showOwnerLogin ? "toggle-elevated" : ""}`}
-              data-testid="button-owner-login"
-              title="Owner Login"
+              onClick={() => { setShowLoginPanel(!showLoginPanel); setLoginError(""); setLoginPassword(""); }}
+              className={`toggle-elevate ${showLoginPanel ? "toggle-elevated" : ""}`}
+              data-testid="button-login"
+              title="Login"
             >
               <Lock className="w-4 h-4" />
             </Button>
@@ -812,20 +821,20 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {showOwnerLogin && !isOwner && (
-        <div className="border-b px-4 py-3 bg-card/50" data-testid="panel-owner-login">
+      {showLoginPanel && !isOwner && !isContributor && (
+        <div className="border-b px-4 py-3 bg-card/50" data-testid="panel-login">
           <div className="max-w-sm mx-auto flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">Masukkan password owner untuk Mirror Mode</p>
+            <p className="text-xs text-muted-foreground">Masukkan password untuk masuk</p>
             <div className="flex gap-2">
               <Input
                 type="password"
-                placeholder="Owner password"
-                value={ownerPassword}
-                onChange={(e) => setOwnerPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleOwnerLogin(); }}
-                data-testid="input-owner-password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
+                data-testid="input-login-password"
               />
-              <Button onClick={handleOwnerLogin} data-testid="button-submit-owner-login">
+              <Button onClick={handleLogin} data-testid="button-submit-login">
                 Masuk
               </Button>
             </div>
@@ -958,6 +967,8 @@ export default function ChatPage() {
               <p className="text-[13px] sm:text-sm text-muted-foreground max-w-[280px] sm:max-w-xs" data-testid="text-tagline">
                 {isOwner
                   ? "Mirror Mode aktif. Ceritakan apa yang lagi lo pikirin, kita bedah bareng."
+                  : isContributor
+                  ? "Contributor Mode. Ceritakan pengalaman lo bareng DR — insight lo berharga buat DARVIS."
                   : "Framework berpikir untuk pengambilan keputusan. Ambil framework-nya, bukan figurnya."}
               </p>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 justify-center mt-5 sm:mt-6 w-full max-w-sm sm:max-w-none px-4 sm:px-0">
@@ -966,6 +977,12 @@ export default function ChatPage() {
                       "Bantu gw pikirin keputusan ini",
                       "Sparring soal strategi dong",
                       "Gw butuh sudut pandang lain",
+                    ]
+                  : isContributor
+                  ? [
+                      "Gw mau cerita tentang DR",
+                      "DR tuh orangnya kayak gini...",
+                      "Menurut gw, DR itu...",
                     ]
                   : [
                       "Bantu saya pikirin keputusan ini",
