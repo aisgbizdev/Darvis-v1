@@ -1,7 +1,7 @@
 # DARVIS - DiAn Raha Vision v2.0
 
 ## Overview
-DARVIS is an AI-powered thinking companion web application evolving into "Executive Intelligence" — digital twin of mas DR with context-aware framing. Built for mas DR as a tool to help think more clearly before making decisions. Long-term vision: become a digital twin of mas DR's thinking style — so others can consult DARVIS and get perspectives reflecting how DR thinks, questions, and decides.
+DARVIS is an AI-powered thinking framework distributor. Core philosophy: "Ambil framework-nya, bukan figurnya." Single core thinking engine with two presentation layers (Mirror/Twin). Built to distribute thinking patterns and decision-making frameworks, not personal branding.
 
 ## User Preferences
 - **Bahasa**: Selalu gunakan Bahasa Indonesia untuk semua komunikasi dan respons. Jangan campur dengan bahasa Inggris supaya tidak salah tafsir.
@@ -81,13 +81,24 @@ DARVIS is an AI-powered thinking companion web application evolving into "Execut
 - **NODE_COMPLIANCE**: Preventive compliance & operational risk
 - Priority: NODE_BIAS > NODE_RISK_GUARD > NODE_NM > other nodes
 
-## Persona System (v0.3)
+## Mirror/Twin Presentation Architecture (v2.0)
+- **Core principle**: Single thinking engine, two presentation layers
+- **Mirror Mode** (owner only): Full persona cards (Broto/Rara/Rere/DR), sharper tone, "mas DR" sapaan, preferences panel, profile enrichment
+- **Twin Mode** (default for all users): Unified voice, no persona labels, no owner identity references, framework-first
+- **Authentication**: POST /api/owner-login with OWNER_PASSWORD, POST /api/owner-logout, GET /api/session-info
+- **Server-side transform**: `mergePersonasToUnifiedVoice()` strips persona labels, `redactOwnerIdentity()` removes "mas DR", "Bapak", etc.
+- **System prompt injection**: PRESENTATION MODE block added (Mirror/Twin) before response mode
+- **Frontend**: Lock icon for owner login, LogOut for logout, empty state adapts per mode
+- **Secret**: OWNER_PASSWORD from Replit Secrets
+
+## Persona System (v2.0)
 - 4 internal perspectives: Broto, Rara, Rere, DR
-- **DEFAULT mode**: Single unified DARVIS voice (integrates all 4 perspectives into one coherent response)
-- **MULTI-PERSONA mode**: On-demand only — activated when user explicitly asks for persona opinions
+- **Mirror Mode DEFAULT**: Single unified DARVIS voice (integrates all 4 perspectives into one coherent response)
+- **Mirror Mode MULTI-PERSONA**: On-demand only — activated when owner explicitly asks for persona opinions
   - Triggers: "menurut Broto", "minta pendapat semua persona", "dari 4 sudut pandang", etc.
   - Shows 4 persona cards with labeled responses
-- DR speaks like mas DR, powered by DARVIS_PROFILE_DR.md + Auto-Learn
+- **Twin Mode**: Always unified voice, multi-persona disabled, persona labels stripped server-side
+- DR speaks like mas DR (Mirror only), powered by DARVIS_PROFILE_DR.md + Auto-Learn
 - detectMultiPersonaIntent() in server/routes.ts handles mode detection
 
 ## Auto-Learn System
@@ -102,6 +113,8 @@ DARVIS is an AI-powered thinking companion web application evolving into "Execut
 
 ## Environment
 - `OPENAI_API_KEY` - Required, stored in Replit Secrets
+- `OWNER_PASSWORD` - Required for Mirror Mode authentication
+- `SESSION_SECRET` - Required for session management
 
 ## Profile Enrichment System (Otomatis dari Percakapan)
 - **Trigger**: Deteksi otomatis ketika DR cerita tentang dirinya sendiri (identitas, preferensi, karakter)
@@ -148,6 +161,7 @@ DARVIS is an AI-powered thinking companion web application evolving into "Execut
 - **Strategic Escalation Logic**: Layer risiko sistemik/reputasi/jangka panjang untuk keputusan besar
 
 ## Recent Changes
+- 2026-02-12: **v2.0 Phase 2 — Mirror/Twin Architecture** — Owner authentication (OWNER_PASSWORD), Mirror Mode (full persona cards, sharper tone), Twin Mode (unified voice, identity-redacted), server-side mergePersonasToUnifiedVoice() + redactOwnerIdentity(), system prompt PRESENTATION MODE injection, frontend lock/logout UI, adaptive empty state
 - 2026-02-12: **v2.0 Phase 1 — Executive Intelligence** — Context Mode Engine (5 modes: strategic/tactical/reflection/crisis/general), Silent Tagging System, context mode UI indicator, DARVIS_CORE.md updated with context mode rules
 - 2026-02-12: **v1.1 — Broto Review improvements** — anti echo-chamber, memory governor, decision fast mode, confidence tone, resource softening, strategic escalation
 - 2026-02-12: **Session isolation** — setiap device/browser dapat session unik, chat history tidak bocor antar user
