@@ -114,7 +114,18 @@ DARVIS is an AI-powered thinking companion web application with quad-persona out
 - Android installable via Chrome's "Add to Home Screen"
 - Icons: darvis-logo.png (512x512), favicon.png (192x192)
 
+## Session & User Isolation
+- **Mechanism**: express-session with unique session ID per browser/device
+- **Cookie**: 1-year maxAge, httpOnly, sameSite=lax
+- **User ID**: Auto-generated per session (`user_{timestamp}_{random}`)
+- **Isolation**: Chat history, preferences, and auto-learn data are per-session
+- **Secret**: SESSION_SECRET from Replit Secrets
+
 ## Recent Changes
+- 2026-02-12: **Session isolation** — setiap device/browser dapat session unik, chat history tidak bocor antar user
+- 2026-02-12: Streaming SSE responses — jawaban muncul real-time kata per kata
+- 2026-02-12: Prompt optimization — jawaban default singkat/tektok (2-5 kalimat), detail hanya kalau diminta
+- 2026-02-12: Max completion tokens dikurangi dari 8192 ke 2048
 - 2026-02-11: Added PWA support — installable on iOS (Add to Home Screen) dan Android, logo DARVIS, standalone mode
 - 2026-02-11: Added Image Upload & Analysis — upload file, paste clipboard, preview, multi-image (max 5), OpenAI Vision
 - 2026-02-11: Added Voice Input — tombol mic untuk speech-to-text, Bahasa Indonesia, pakai Web Speech API browser
