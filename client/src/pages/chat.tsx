@@ -733,7 +733,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background" data-testid="page-chat">
-      <header className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 sm:py-3 border-b shrink-0" data-testid="header-darvis">
+      <header className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 sm:py-3 border-b shrink-0 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] sm:pt-2" data-testid="header-darvis">
         <div className="flex items-center gap-2" data-testid="header-brand">
           <img src="/darvis-logo.png" alt="DARVIS" className="w-7 h-7 sm:w-8 sm:h-8 rounded-md object-cover" />
           <div>
@@ -1083,9 +1083,9 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isListening ? "Bicara sekarang..." : attachedImages.length > 0 ? "Tulis pesan tentang gambar..." : "Ketik, paste gambar, atau tekan mic..."}
+            placeholder={isListening ? "Bicara sekarang..." : attachedImages.length > 0 ? "Tulis pesan tentang gambar..." : "Ketik pesan di sini..."}
             rows={1}
-            className="flex-1 resize-none min-h-[42px] max-h-[120px] text-[15px] sm:text-sm"
+            className="flex-1 resize-none min-h-[42px] max-h-[120px] text-sm"
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
               target.style.height = "auto";
