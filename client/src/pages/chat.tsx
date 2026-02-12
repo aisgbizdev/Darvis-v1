@@ -969,7 +969,7 @@ export default function ChatPage() {
                   ? "Mirror Mode aktif. Ceritakan apa yang lagi lo pikirin, kita bedah bareng."
                   : isContributor
                   ? "Contributor Mode. Ceritakan pengalaman lo bareng DR — insight lo berharga buat DARVIS."
-                  : "Ambil framework-nya, bukan figurnya."}
+                  : "Partner diskusi & insight. Ambil framework-nya, bukan figurnya."}
               </p>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 justify-center mt-5 sm:mt-6 w-full max-w-sm sm:max-w-none px-4 sm:px-0">
                 {(isOwner
