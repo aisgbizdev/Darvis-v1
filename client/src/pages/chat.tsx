@@ -172,6 +172,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   gaya_bahasa: "Gaya Bahasa",
 };
 
+function parseSSELine(line: string): { type: string; content?: string; nodeUsed?: string | null; fullReply?: string; message?: string } | null {
+  if (!line.startsWith("data: ")) return null;
+  try {
+    return JSON.parse(line.slice(6));
+  } catch {
+    return null;
+  }
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -280,15 +289,59 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const chatMutation = useMutation({
-    mutationFn: async (payload: { message: string; images?: string[] }) => {
-      const res = await apiRequest("POST", "/api/chat", payload);
-      return (await res.json()) as ChatResponse;
-    },
-    onSuccess: (data) => {
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-    },
-    onError: () => {
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+
+  const sendMessage = useCallback(async (payload: { message: string; images?: string[] }) => {
+    setIsStreaming(true);
+    setStreamingContent("");
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        credentials: "include",
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error("Stream request failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const parsed = parseSSELine(line);
+          if (!parsed) continue;
+
+          if (parsed.type === "chunk" && parsed.content) {
+            accumulated += parsed.content;
+            setStreamingContent(accumulated);
+          } else if (parsed.type === "done") {
+            const finalContent = parsed.fullReply || accumulated;
+            setMessages((prev) => [...prev, { role: "assistant", content: finalContent }]);
+            setStreamingContent("");
+          } else if (parsed.type === "error") {
+            setMessages((prev) => [...prev, {
+              role: "assistant",
+              content: parsed.message || "Koneksi terputus. Coba lagi ya.",
+            }]);
+            setStreamingContent("");
+          }
+        }
+      }
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -296,18 +349,19 @@ export default function ChatPage() {
           content: "Maaf, ada gangguan teknis. Coba ulangi ya — kadang koneksi memang perlu waktu.",
         },
       ]);
-    },
-    onSettled: () => {
+      setStreamingContent("");
+    } finally {
+      setIsStreaming(false);
       inputRef.current?.focus();
       setTimeout(scrollToBottom, 50);
-    },
-  });
+    }
+  }, [scrollToBottom]);
 
   useEffect(() => {
-    if (chatMutation.isPending) {
+    if (isStreaming) {
       scrollToBottom();
     }
-  }, [chatMutation.isPending, scrollToBottom]);
+  }, [isStreaming, streamingContent, scrollToBottom]);
 
   const clearMutation = useMutation({
     mutationFn: async () => {
@@ -377,7 +431,7 @@ export default function ChatPage() {
   const handleSend = () => {
     const trimmed = input.trim();
     const hasContent = trimmed || attachedImages.length > 0;
-    if (!hasContent || chatMutation.isPending) return;
+    if (!hasContent || isStreaming) return;
 
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -391,7 +445,7 @@ export default function ChatPage() {
     setInput("");
     setAttachedImages([]);
 
-    chatMutation.mutate({ message: msgText, images: currentImages });
+    sendMessage({ message: msgText, images: currentImages });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -585,7 +639,10 @@ export default function ChatPage() {
             ),
           )}
 
-          {chatMutation.isPending && <TypingIndicator />}
+          {isStreaming && streamingContent && (
+            <AssistantBubble content={streamingContent} index={messages.length} />
+          )}
+          {isStreaming && !streamingContent && <TypingIndicator />}
         </div>
       </div>
 
@@ -633,7 +690,7 @@ export default function ChatPage() {
         <div className="max-w-2xl mx-auto flex items-end gap-2">
           <Button
             onClick={() => fileInputRef.current?.click()}
-            disabled={chatMutation.isPending || attachedImages.length >= 5}
+            disabled={isStreaming || attachedImages.length >= 5}
             size="icon"
             variant="outline"
             data-testid="button-upload-image"
@@ -654,13 +711,13 @@ export default function ChatPage() {
               target.style.height = "auto";
               target.style.height = Math.min(target.scrollHeight, 120) + "px";
             }}
-            disabled={chatMutation.isPending}
+            disabled={isStreaming}
             data-testid="input-message"
           />
           {voiceSupported && (
             <Button
               onClick={toggleVoice}
-              disabled={chatMutation.isPending}
+              disabled={isStreaming}
               size="icon"
               variant={isListening ? "destructive" : "outline"}
               data-testid="button-voice"
@@ -670,11 +727,11 @@ export default function ChatPage() {
           )}
           <Button
             onClick={handleSend}
-            disabled={(!input.trim() && attachedImages.length === 0) || chatMutation.isPending}
+            disabled={(!input.trim() && attachedImages.length === 0) || isStreaming}
             size="icon"
             data-testid="button-send"
           >
-            {chatMutation.isPending ? (
+            {isStreaming ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Send className="w-4 h-4" />

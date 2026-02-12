@@ -923,55 +923,82 @@ export async function registerRoutes(
         apiMessages.push({ role: "user", content: message });
       }
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: apiMessages,
-        max_completion_tokens: 8192,
-      });
-
-      const choice = completion.choices[0];
-      const rawReply = choice?.message?.content || "";
-
-      let reply: string;
-      if (!rawReply.trim()) {
-        reply = isMultiPersonaMode
-          ? "Broto: Maaf mas DR, saya butuh waktu untuk memproses pertanyaan ini. Bisa coba ulangi?\n\nRara: Tenang mas DR, kadang perlu pendekatan berbeda. Coba sampaikan pertanyaan dengan cara lain ya.\n\nRere: Mungkin coba tanya dari sudut yang berbeda, kadang itu bantu.\n\nDR: Gw juga kadang gitu — coba rephrase aja, biar kita bisa jalan lagi."
-          : "Maaf, gw butuh waktu untuk memproses pertanyaan ini. Coba ulangi atau rephrase ya.";
-      } else {
-        reply = enforceFormat(rawReply, isMultiPersonaMode);
-      }
-
-      saveMessage(USER_ID, "user", message);
-      saveMessage(USER_ID, "assistant", reply);
-
-      if (detectPersonaMention(message)) {
-        extractPersonaFeedback(message, reply).catch((err) => {
-          console.error("Passive listening error:", err?.message || err);
-        });
-      }
-
-      if (detectDRIdentity(message)) {
-        extractProfileEnrichment(message).catch((err) => {
-          console.error("Profile enrichment error:", err?.message || err);
-        });
-      }
-
-      const msgCount = getMessageCount(USER_ID);
-      if (msgCount > 0 && msgCount % 20 === 0) {
-        generateSummary(USER_ID).catch((err) => {
-          console.error("Auto-summary error:", err?.message || err);
-        });
-      }
-
-      if (msgCount > 0 && msgCount % 10 === 0) {
-        extractPreferences(USER_ID).catch((err) => {
-          console.error("Auto-learn error:", err?.message || err);
-        });
-      }
-
       const nodeUsed = nodesUsed.length > 0 ? nodesUsed.join(", ") : null;
-      const response: ChatResponse = { reply, nodeUsed };
-      return res.json(response);
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), 60000);
+
+      try {
+        const stream = await openai.chat.completions.create({
+          model: "gpt-5",
+          messages: apiMessages,
+          max_completion_tokens: 2048,
+          stream: true,
+        }, { signal: abortController.signal });
+
+        let fullReply = "";
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            fullReply += delta;
+            res.write(`data: ${JSON.stringify({ type: "chunk", content: delta })}\n\n`);
+          }
+        }
+        clearTimeout(timeout);
+
+        let reply: string;
+        if (!fullReply.trim()) {
+          reply = isMultiPersonaMode
+            ? "Broto: Maaf mas DR, saya butuh waktu untuk memproses pertanyaan ini. Bisa coba ulangi?\n\nRara: Tenang mas DR, kadang perlu pendekatan berbeda. Coba sampaikan pertanyaan dengan cara lain ya.\n\nRere: Mungkin coba tanya dari sudut yang berbeda, kadang itu bantu.\n\nDR: Gw juga kadang gitu — coba rephrase aja, biar kita bisa jalan lagi."
+            : "Maaf, gw butuh waktu untuk memproses pertanyaan ini. Coba ulangi atau rephrase ya.";
+          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed, fullReply: reply })}\n\n`);
+        } else {
+          reply = enforceFormat(fullReply, isMultiPersonaMode);
+          res.write(`data: ${JSON.stringify({ type: "done", nodeUsed })}\n\n`);
+        }
+        res.end();
+
+        saveMessage(USER_ID, "user", message);
+        saveMessage(USER_ID, "assistant", reply);
+
+        if (detectPersonaMention(message)) {
+          extractPersonaFeedback(message, reply).catch((err) => {
+            console.error("Passive listening error:", err?.message || err);
+          });
+        }
+
+        if (detectDRIdentity(message)) {
+          extractProfileEnrichment(message).catch((err) => {
+            console.error("Profile enrichment error:", err?.message || err);
+          });
+        }
+
+        const msgCount = getMessageCount(USER_ID);
+        if (msgCount > 0 && msgCount % 20 === 0) {
+          generateSummary(USER_ID).catch((err) => {
+            console.error("Auto-summary error:", err?.message || err);
+          });
+        }
+
+        if (msgCount > 0 && msgCount % 10 === 0) {
+          extractPreferences(USER_ID).catch((err) => {
+            console.error("Auto-learn error:", err?.message || err);
+          });
+        }
+      } catch (streamErr: any) {
+        clearTimeout(timeout);
+        if (!res.headersSent) {
+          return res.status(500).json({ message: "Internal server error" });
+        }
+        res.write(`data: ${JSON.stringify({ type: "error", message: "Koneksi terputus. Coba lagi ya." })}\n\n`);
+        res.end();
+      }
     } catch (err: any) {
       console.error("Chat API error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
