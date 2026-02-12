@@ -1,4 +1,4 @@
-# DARVIS - DiAn Raha Vision v0.3
+# DARVIS - DiAn Raha Vision v1.1
 
 ## Overview
 DARVIS is an AI-powered thinking companion web application with quad-persona output (Broto, Rara, Rere, DR). Built for mas DR as a tool to help think more clearly before making decisions. Long-term vision: become a digital twin of mas DR's thinking style — so others can consult DARVIS and get perspectives reflecting how DR thinks, questions, and decides.
@@ -17,7 +17,7 @@ DARVIS is an AI-powered thinking companion web application with quad-persona out
 - `client/src/pages/chat.tsx` - Main chat UI page (4-persona display)
 - `server/routes.ts` - /api/chat endpoint with OpenAI integration
 - `shared/schema.ts` - ChatMessage, ChatRequest, ChatResponse types
-- `prompts/DARVIS_CORE.md` - Core system prompt (quad-persona rules v0.2)
+- `prompts/DARVIS_CORE.md` - Core system prompt (quad-persona rules v1.1)
 - `prompts/DARVIS_PROFILE_DR.md` - DR's foundational profile (digital twin knowledge base)
 - `prompts/DARVIS_NODE_SolidGroup.md` - Solid Group context node
 - `prompts/DARVIS_NODE_BIAS.md` - Behavioral bias & emotional context node
@@ -121,7 +121,16 @@ DARVIS is an AI-powered thinking companion web application with quad-persona out
 - **Isolation**: Chat history, preferences, and auto-learn data are per-session
 - **Secret**: SESSION_SECRET from Replit Secrets
 
+## v1.1 Improvements (Broto Review)
+- **Anti Echo-Chamber Protocol**: DARVIS wajib kasih counter-angle saat user terlalu yakin / high-stakes decision
+- **Memory Governor**: Injection preferensi dibatasi max 5 poin high-signal, scoring system (confidence 40% + recency 60%), context budget guard (reduce messages saat banyak node aktif)
+- **Decision Fast Mode**: Trigger "quick/ringkas/fast decision" → format 3 bullet + 1 risk + 1 blind spot + 1 aksi
+- **Confidence Tone Calibration**: Tone deskriptif untuk data, reflektif untuk opini, rendah klaim untuk prediksi
+- **NODE_RESOURCES Softening**: Max 1 referensi per jawaban, jangan pernah buka respons dengan referensi
+- **Strategic Escalation Logic**: Layer risiko sistemik/reputasi/jangka panjang untuk keputusan besar
+
 ## Recent Changes
+- 2026-02-12: **v1.1 — Broto Review improvements** — anti echo-chamber, memory governor, decision fast mode, confidence tone, resource softening, strategic escalation
 - 2026-02-12: **Session isolation** — setiap device/browser dapat session unik, chat history tidak bocor antar user
 - 2026-02-12: Streaming SSE responses — jawaban muncul real-time kata per kata
 - 2026-02-12: Prompt optimization — jawaban default singkat/tektok (2-5 kalimat), detail hanya kalau diminta

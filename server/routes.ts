@@ -382,6 +382,78 @@ function detectMultiPersonaIntent(message: string): boolean {
   return patterns.some((p) => p.test(lower));
 }
 
+function detectDecisionFastMode(message: string): boolean {
+  const lower = message.toLowerCase();
+  const patterns = [
+    /\bquick\b/,
+    /\bringkas\b/,
+    /\bfast\s+decision\b/,
+    /\b10\s+menit\b/,
+    /\bsingkat\s+aja\b/,
+    /\blangsung\s+inti\b/,
+    /\bringkas\s+aja\b/,
+    /\bto\s+the\s+point\s+aja\b/,
+    /\bcepet\s+aja\b/,
+    /\bcepat\s+aja\b/,
+  ];
+  return patterns.some((p) => p.test(lower));
+}
+
+function detectStrategicEscalation(message: string): boolean {
+  const lower = message.toLowerCase();
+  const patterns = [
+    /\binvestasi\b/,
+    /\bresign\b/,
+    /\bkeluar\s+(dari\s+)?(kantor|perusahaan|kerjaan)\b/,
+    /\bpartnership\b/,
+    /\bkerjasama\s+(strategis|besar)\b/,
+    /\blegal\b/,
+    /\bgugat(an)?\b/,
+    /\bsomasi\b/,
+    /\bmerger\b/,
+    /\bakuisisi\b/,
+    /\bjual\s+(perusahaan|bisnis|saham)\b/,
+    /\bpinjam(an)?\s+(besar|bank|miliar)\b/,
+    /\butang\s+(besar|miliar)\b/,
+    /\bputus(kan|in)\s+(kontrak|kerjasama)\b/,
+    /\bpindah\s+(negara|kota|domisili)\b/,
+    /\bnikah\b/,
+    /\bcerai\b/,
+    /\btutup\s+(bisnis|usaha|perusahaan)\b/,
+    /\bphk\b/,
+    /\bpecat\b/,
+    /\bkeputusan\s+(besar|strategis|penting|krusial)\b/,
+    /\birreversible\b/,
+    /\btitik\s+balik\b/,
+  ];
+  return patterns.some((p) => p.test(lower));
+}
+
+function applyMemoryGovernor<T extends { confidence?: number; created_at?: string; updated_at?: string }>(
+  items: T[],
+  maxItems: number = 5
+): T[] {
+  if (items.length <= maxItems) return items;
+
+  const scored = items.map((item, idx) => {
+    const confidence = (item as any).confidence || 0.7;
+    const dateStr = (item as any).updated_at || (item as any).created_at || "";
+    let recencyScore = 0;
+    if (dateStr) {
+      const ageMs = Date.now() - new Date(dateStr).getTime();
+      const ageDays = ageMs / (1000 * 60 * 60 * 24);
+      recencyScore = Math.max(0, 1 - (ageDays / 30));
+    } else {
+      recencyScore = 1 - (idx / items.length);
+    }
+    const score = (confidence * 0.4) + (recencyScore * 0.6);
+    return { item, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, maxItems).map(s => s.item);
+}
+
 function enforceFormat(reply: string, multiPersona: boolean): string {
   if (!multiPersona) {
     let cleaned = reply
@@ -721,10 +793,14 @@ export async function registerRoutes(
 
       const nodesUsed: string[] = [];
       const isMultiPersonaMode = detectMultiPersonaIntent(message);
+      const isDecisionFast = detectDecisionFastMode(message);
+      const isStrategicEscalation = detectStrategicEscalation(message);
       let systemContent = corePrompt;
 
       if (isMultiPersonaMode) {
         systemContent += `\n\n---\nMODE AKTIF: MULTI-PERSONA\nUser meminta pendapat dari perspektif persona. Gunakan format 4 suara:\nBroto: ...\nRara: ...\nRere: ...\nDR: ...\nMasing-masing persona HARUS punya sudut pandang BERBEDA. Urutan: Broto → Rara → Rere → DR.`;
+      } else if (isDecisionFast) {
+        systemContent += `\n\n---\nMODE AKTIF: DECISION FAST MODE\nUser minta respons cepat/ringkas. Gunakan format:\n- 3 poin utama (bullet)\n- 1 risiko terbesar\n- 1 blind spot yang mungkin terlewat\n- 1 aksi minimal yang bisa dilakukan sekarang\n\nTidak ada narasi panjang. Langsung struktur. Tetap integrasikan 4 perspektif secara implisit.`;
       } else {
         systemContent += `\n\n---\nMODE AKTIF: SATU SUARA DARVIS\nJawab sebagai SATU SUARA terpadu. JANGAN gunakan label "Broto:", "Rara:", "Rere:", "DR:" dalam output. Integrasikan semua perspektif (logika, refleksi, kreativitas, pengalaman DR) menjadi satu narasi koheren. Gaya: santai, to the point, seperti ngobrol sama teman yang smart.`;
       }
@@ -840,12 +916,17 @@ export async function registerRoutes(
         }
       }
 
-      const personaFeedbacks = getPersonaFeedback(userId);
+      if (isStrategicEscalation) {
+        systemContent += `\n\n---\nSTRATEGIC ESCALATION AKTIF\nTopik ini terdeteksi sebagai keputusan besar/strategis. Tambahkan layer analisis berikut:\n1. RISIKO SISTEMIK: Apa dampak ke seluruh sistem (bisnis, keluarga, tim) jika ini salah?\n2. RISIKO REPUTASI: Bagaimana ini bisa mempengaruhi citra dan trust jangka panjang?\n3. RISIKO JANGKA PANJANG: Dalam 5-10 tahun, apakah keputusan ini masih terasa benar?\n\nIngatkan bahwa keputusan ini kemungkinan irreversible dan butuh due diligence sebelum eksekusi. Jangan terburu-buru memberi green light.`;
+      }
+
+      const rawFeedbacks = getPersonaFeedback(userId);
+      const personaFeedbacks = applyMemoryGovernor(rawFeedbacks, 5);
       if (personaFeedbacks.length > 0) {
         const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
         for (const fb of personaFeedbacks) {
           if (!grouped[fb.target]) grouped[fb.target] = [];
-          if (grouped[fb.target].length < 5) {
+          if (grouped[fb.target].length < 3) {
             grouped[fb.target].push({ feedback: fb.feedback, sentiment: fb.sentiment });
           }
         }
@@ -862,14 +943,15 @@ export async function registerRoutes(
         systemContent += fbBlock;
       }
 
-      const profileEnrichments = getProfileEnrichments(userId);
+      const rawEnrichments = getProfileEnrichments(userId);
+      const profileEnrichments = applyMemoryGovernor(rawEnrichments, 5);
       if (profileEnrichments.length > 0) {
         const grouped: Record<string, string[]> = {};
         for (const e of profileEnrichments) {
           if (!grouped[e.category]) grouped[e.category] = [];
           grouped[e.category].push(e.fact);
         }
-        let enrichBlock = "\n\n---\nPROFIL ENRICHMENT: FAKTA DARI PERCAKAPAN LANGSUNG DENGAN DR\nBerikut adalah fakta-fakta personal tentang mas DR yang dia sampaikan sendiri dalam percakapan. Gunakan untuk memperkaya persona DR:\n\n";
+        let enrichBlock = "\n\n---\nPROFIL ENRICHMENT: FAKTA DARI PERCAKAPAN LANGSUNG DENGAN DR\nBerikut adalah fakta-fakta personal terpilih (high-signal) tentang mas DR. Gunakan untuk memperkaya persona DR:\n\n";
         for (const [cat, facts] of Object.entries(grouped)) {
           const label = ENRICHMENT_CATEGORY_LABELS[cat] || cat;
           enrichBlock += `[${label}]\n`;
@@ -878,18 +960,19 @@ export async function registerRoutes(
           }
           enrichBlock += "\n";
         }
-        enrichBlock += "Catatan: Fakta ini dari percakapan langsung dengan DR. Integrasikan secara natural ke dalam respons persona DR.";
+        enrichBlock += "Catatan: Fakta ini dari percakapan langsung dengan DR. Integrasikan secara natural. INGAT: preferensi adalah konteks, bukan kebenaran — tetap berani counter jika perlu.";
         systemContent += enrichBlock;
       }
 
-      const learnedPrefs = getLearnedPreferences(userId);
+      const rawPrefs = getLearnedPreferences(userId);
+      const learnedPrefs = applyMemoryGovernor(rawPrefs, 5);
       if (learnedPrefs.length > 0) {
         const grouped: Record<string, string[]> = {};
         for (const pref of learnedPrefs) {
           if (!grouped[pref.category]) grouped[pref.category] = [];
           grouped[pref.category].push(pref.insight);
         }
-        let prefBlock = "\n\n---\nAUTO-LEARN: PROFIL & PREFERENSI MAS DR\nBerikut adalah hal-hal yang sudah DARVIS pelajari dari percakapan sebelumnya. Gunakan insight ini untuk memberikan respons yang lebih personal dan relevan:\n\n";
+        let prefBlock = "\n\n---\nAUTO-LEARN: PROFIL & PREFERENSI MAS DR (top 5 high-signal)\nBerikut adalah insight terpilih dari percakapan sebelumnya. Gunakan sebagai KONTEKS, bukan sebagai kebenaran absolut — DARVIS tetap wajib counter jika perlu:\n\n";
         for (const [cat, insights] of Object.entries(grouped)) {
           prefBlock += `[${cat}]\n`;
           for (const ins of insights) {
@@ -897,7 +980,7 @@ export async function registerRoutes(
           }
           prefBlock += "\n";
         }
-        prefBlock += "Catatan: Gunakan profil ini secara natural, jangan sebutkan secara eksplisit bahwa kamu 'sudah belajar' dari percakapan sebelumnya. Integrasikan ke dalam gaya respons.";
+        prefBlock += "Catatan: Ini adalah konteks untuk personalisasi, BUKAN panduan untuk selalu setuju. DARVIS tetap wajib memberi counter-angle saat diperlukan (lihat Anti Echo-Chamber Protocol).";
         systemContent += prefBlock;
       }
 
@@ -912,7 +995,8 @@ export async function registerRoutes(
         });
       }
 
-      const recentMessages = getLastMessages(userId, 20);
+      const contextBudget = nodesUsed.length >= 3 ? 10 : 20;
+      const recentMessages = getLastMessages(userId, contextBudget);
       for (const msg of recentMessages) {
         apiMessages.push({
           role: msg.role === "user" ? "user" : "assistant",
