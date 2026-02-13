@@ -227,6 +227,7 @@ export default function ChatPage() {
   const pendingTtsRef = useRef<string | null>(null);
   const conversationModeRef = useRef(false);
   const vadSendRef = useRef<((text: string) => void) | null>(null);
+  const lastHeardTextRef = useRef("");
 
   useEffect(() => {
     if (!showDownloadMenu) return;
@@ -394,6 +395,7 @@ export default function ChatPage() {
         }
         const currentText = (finalTranscript + interimTranscript).trim();
         setInput(currentText);
+        lastHeardTextRef.current = currentText;
 
         if (conversationModeRef.current && currentText) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -417,12 +419,44 @@ export default function ChatPage() {
           clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = null;
         }
-        vadActiveRef.current = false;
+
+        if (conversationModeRef.current && vadActiveRef.current) {
+          vadActiveRef.current = false;
+          const heardText = lastHeardTextRef.current.trim();
+          lastHeardTextRef.current = "";
+          if (heardText && vadSendRef.current) {
+            vadSendRef.current(heardText);
+          } else if (recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+              setIsListening(true);
+            } catch {}
+          }
+        } else if (conversationModeRef.current && !vadActiveRef.current) {
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+              setIsListening(true);
+            } catch {}
+          }
+        } else {
+          vadActiveRef.current = false;
+        }
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         if (event.error !== "aborted") {
           setIsListening(false);
+          if (conversationModeRef.current && event.error === "no-speech") {
+            setTimeout(() => {
+              if (conversationModeRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start();
+                  setIsListening(true);
+                } catch {}
+              }
+            }, 300);
+          }
         }
       };
 
