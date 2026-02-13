@@ -2229,13 +2229,27 @@ RULES:
 - Hanya ekstrak informasi yang JELAS disebutkan dalam percakapan, jangan berasumsi
 - Untuk nama tim member, gunakan nama yang disebutkan (contoh: "Andi", "Sari", bukan "dia" atau "orang itu")
 - Jika ada nama yang sudah tercatat di konteks, UPDATE info-nya alih-alih buat entri baru
-- Untuk meeting, coba parsing tanggal/waktu jika disebutkan ("besok jam 10" → hitung dari hari ini)
-- Untuk action items: tangkap instruksi, delegasi, tugas, follow-up yang disebut
-- Untuk projects: tangkap project baru atau update status project existing
-- follow_ups: tangkap hal-hal yang user bilang "nanti gw..." atau "besok mau..." sebagai reminder
+- Untuk meeting, WAJIB parsing tanggal/waktu dari bahasa natural ke format YYYY-MM-DD HH:MM
+- Untuk action items: tangkap instruksi, delegasi, tugas, follow-up yang disebut. Parsing deadline dari bahasa natural.
+- Untuk projects: tangkap project baru atau update status project existing. Parsing deadline dari bahasa natural.
+- follow_ups: tangkap hal-hal yang user bilang "nanti gw..." atau "besok mau..." sebagai reminder. Parsing deadline_hint ke tanggal konkret.
 - Jika tidak ada data untuk suatu kategori, kembalikan array kosong
-- Tanggal hari ini: ${new Date().toISOString().split('T')[0]}
+- Tanggal hari ini: ${new Date().toISOString().split('T')[0]} (${new Date().toLocaleDateString('id-ID', { weekday: 'long' })})
+- Waktu sekarang: ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })} WIB
 - Maksimal 5 item per kategori
+
+PARSING TANGGAL RELATIF (WAJIB):
+- "hari ini" → ${new Date().toISOString().split('T')[0]}
+- "besok" / "besuk" → tanggal hari ini + 1 hari
+- "lusa" → tanggal hari ini + 2 hari
+- "2 hari lagi" / "3 hari lagi" → tanggal hari ini + N hari
+- "minggu depan" → tanggal hari ini + 7 hari
+- "minggu ini" → tetap minggu ini, perkirakan hari kerja terdekat
+- "bulan depan" → tanggal 1 bulan berikutnya
+- "Senin depan" / "Jumat ini" → hitung tanggal pastinya dari hari ini
+- "jam 10" / "jam 17.00" → format HH:MM
+- "sore" → 15:00, "pagi" → 09:00, "siang" → 12:00, "malam" → 20:00
+- SELALU konversi ke tanggal absolut (YYYY-MM-DD), JANGAN biarkan tetap relatif
 
 Respond ONLY with valid JSON, no other text.`;
 
