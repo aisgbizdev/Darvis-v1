@@ -1349,7 +1349,24 @@ export async function registerRoutes(
       res.flushHeaders();
 
       const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), 60000);
+      const timeout = setTimeout(() => abortController.abort(), 90000);
+
+      const heartbeatInterval = setInterval(() => {
+        try {
+          res.write(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`);
+          if (typeof (res as any).flush === "function") {
+            (res as any).flush();
+          }
+        } catch { /* connection closed */ }
+      }, 15000);
+
+      const serverCleanup = () => {
+        clearTimeout(timeout);
+        clearInterval(heartbeatInterval);
+        abortController.abort();
+      };
+
+      res.on("close", serverCleanup);
 
       try {
         const stream = await openai.chat.completions.create({
@@ -1371,6 +1388,8 @@ export async function registerRoutes(
           }
         }
         clearTimeout(timeout);
+        clearInterval(heartbeatInterval);
+        res.removeListener("close", serverCleanup);
 
         const presentationMode = isOwner ? "mirror" : isContributor ? "contributor" : "twin";
         let reply: string;
@@ -1445,10 +1464,17 @@ export async function registerRoutes(
         }
       } catch (streamErr: any) {
         clearTimeout(timeout);
+        clearInterval(heartbeatInterval);
+        res.removeListener("close", serverCleanup);
+        const isTimeout = streamErr?.name === "AbortError";
+        const errorMsg = isTimeout
+          ? "Respons terlalu lama. Coba kirim ulang ya."
+          : "Koneksi terputus. Coba lagi ya.";
+        console.error("Stream error:", isTimeout ? "TIMEOUT" : streamErr?.message || streamErr);
         if (!res.headersSent) {
-          return res.status(500).json({ message: "Internal server error" });
+          return res.status(500).json({ message: errorMsg });
         }
-        res.write(`data: ${JSON.stringify({ type: "error", message: "Koneksi terputus. Coba lagi ya." })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "error", message: errorMsg })}\n\n`);
         res.end();
       }
     } catch (err: any) {

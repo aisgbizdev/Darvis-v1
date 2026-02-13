@@ -459,17 +459,33 @@ export default function ChatPage() {
   const [streamingContent, setStreamingContent] = useState("");
   const [currentContextMode, setCurrentContextMode] = useState<string | null>(null);
 
-  const sendMessage = useCallback(async (payload: { message: string; images?: string[] }) => {
+  const sendMessage = useCallback(async (payload: { message: string; images?: string[] }, retryCount = 0) => {
     setIsStreaming(true);
-    setStreamingContent("");
+    if (retryCount === 0) setStreamingContent("");
+    const MAX_RETRIES = 2;
+
+    let fetchTimeout: ReturnType<typeof setTimeout> | null = null;
+    let staleCheck: ReturnType<typeof setInterval> | null = null;
+    let controller: AbortController | null = null;
+
+    const cleanup = () => {
+      if (fetchTimeout) { clearTimeout(fetchTimeout); fetchTimeout = null; }
+      if (staleCheck) { clearInterval(staleCheck); staleCheck = null; }
+    };
 
     try {
+      controller = new AbortController();
+      fetchTimeout = setTimeout(() => controller?.abort(), 90000);
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         credentials: "include",
+        signal: controller.signal,
       });
+
+      if (fetchTimeout) { clearTimeout(fetchTimeout); fetchTimeout = null; }
 
       if (!response.ok || !response.body) {
         throw new Error("Stream request failed");
@@ -479,11 +495,21 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let buffer = "";
       let accumulated = "";
+      let lastChunkTime = Date.now();
+      let gotData = false;
+
+      staleCheck = setInterval(() => {
+        if (Date.now() - lastChunkTime > 45000 && !gotData) {
+          reader.cancel();
+          cleanup();
+        }
+      }, 5000);
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
+        lastChunkTime = Date.now();
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
@@ -492,16 +518,30 @@ export default function ChatPage() {
           const parsed = parseSSELine(line);
           if (!parsed) continue;
 
+          if (parsed.type === "heartbeat") {
+            lastChunkTime = Date.now();
+            continue;
+          }
+
           if (parsed.type === "chunk" && parsed.content) {
+            gotData = true;
             accumulated += parsed.content;
             setStreamingContent(accumulated);
           } else if (parsed.type === "done") {
+            gotData = true;
             const finalContent = parsed.fullReply || accumulated;
             setMessages((prev) => [...prev, { role: "assistant", content: finalContent }]);
             setStreamingContent("");
             if (parsed.contextMode) setCurrentContextMode(parsed.contextMode);
             else setCurrentContextMode(null);
           } else if (parsed.type === "error") {
+            cleanup();
+            if (retryCount < MAX_RETRIES && !gotData) {
+              controller?.abort();
+              setStreamingContent("Mencoba ulang...");
+              await new Promise(r => setTimeout(r, 2000));
+              return sendMessage(payload, retryCount + 1);
+            }
             setMessages((prev) => [...prev, {
               role: "assistant",
               content: parsed.message || "Koneksi terputus. Coba lagi ya.",
@@ -510,12 +550,29 @@ export default function ChatPage() {
           }
         }
       }
-    } catch {
+      cleanup();
+
+      if (!gotData && retryCount < MAX_RETRIES) {
+        setStreamingContent("Mencoba ulang...");
+        await new Promise(r => setTimeout(r, 2000));
+        return sendMessage(payload, retryCount + 1);
+      }
+    } catch (err: unknown) {
+      cleanup();
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      if (retryCount < MAX_RETRIES) {
+        controller?.abort();
+        setStreamingContent("Mencoba ulang...");
+        await new Promise(r => setTimeout(r, 2000));
+        return sendMessage(payload, retryCount + 1);
+      }
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Maaf, ada gangguan teknis. Coba ulangi ya — kadang koneksi memang perlu waktu.",
+          content: isAbort
+            ? "Respons terlalu lama. Coba kirim ulang dengan pertanyaan yang lebih singkat."
+            : "Maaf, ada gangguan teknis. Coba ulangi ya.",
         },
       ]);
       setStreamingContent("");
