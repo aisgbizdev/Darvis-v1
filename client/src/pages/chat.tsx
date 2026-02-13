@@ -1267,7 +1267,7 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isListening ? "Bicara sekarang..." : attachedImages.length > 0 ? "Tulis pesan tentang gambar..." : "Ketik pesan di sini..."}
+            placeholder={isListening ? "Ngomong aja..." : attachedImages.length > 0 ? "Ceritain soal gambarnya..." : "Mau ngobrolin apa nih..."}
             rows={1}
             className="flex-1 resize-none min-h-[42px] max-h-[120px] text-sm"
             onInput={(e) => {
