@@ -431,6 +431,8 @@ db.exec(`
     responsibilities TEXT,
     active_projects TEXT,
     notes TEXT,
+    aliases TEXT,
+    category TEXT NOT NULL DEFAULT 'team' CHECK(category IN ('team', 'direksi', 'family', 'external', 'management')),
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -438,6 +440,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_team_members_name ON team_members(name);
   CREATE INDEX IF NOT EXISTS idx_team_members_status ON team_members(status);
 `);
+
+try { db.exec(`ALTER TABLE team_members ADD COLUMN aliases TEXT`); } catch(e) {}
+try { db.exec(`ALTER TABLE team_members ADD COLUMN category TEXT NOT NULL DEFAULT 'team'`); } catch(e) {}
 
 export interface TeamMember {
   id: number;
@@ -448,6 +453,8 @@ export interface TeamMember {
   responsibilities: string | null;
   active_projects: string | null;
   notes: string | null;
+  aliases: string | null;
+  category: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -464,6 +471,22 @@ export function getTeamMemberByName(name: string): TeamMember | undefined {
   return db.prepare(`SELECT * FROM team_members WHERE LOWER(name) = LOWER(?)`).get(name) as TeamMember | undefined;
 }
 
+export function getTeamMemberByNameOrAlias(name: string): TeamMember | undefined {
+  const trimmed = name.trim();
+  if (!trimmed) return undefined;
+  const byName = db.prepare(`SELECT * FROM team_members WHERE LOWER(TRIM(name)) = LOWER(?)`).get(trimmed) as TeamMember | undefined;
+  if (byName) return byName;
+  const allMembers = db.prepare(`SELECT * FROM team_members WHERE aliases IS NOT NULL AND aliases != ''`).all() as TeamMember[];
+  const lowerName = trimmed.toLowerCase();
+  for (const m of allMembers) {
+    if (m.aliases) {
+      const aliasList = m.aliases.split(",").map(a => a.trim().toLowerCase());
+      if (aliasList.includes(lowerName)) return m;
+    }
+  }
+  return undefined;
+}
+
 export function getTeamMemberById(id: number): TeamMember | undefined {
   return db.prepare(`SELECT * FROM team_members WHERE id = ?`).get(id) as TeamMember | undefined;
 }
@@ -476,8 +499,10 @@ export function upsertTeamMember(data: {
   responsibilities?: string | null;
   active_projects?: string | null;
   notes?: string | null;
+  aliases?: string | null;
+  category?: string;
 }): number {
-  const existing = getTeamMemberByName(data.name);
+  const existing = getTeamMemberByNameOrAlias(data.name);
   if (existing) {
     const updates: string[] = [];
     const values: any[] = [];
@@ -487,6 +512,8 @@ export function upsertTeamMember(data: {
     if (data.responsibilities !== undefined) { updates.push("responsibilities = ?"); values.push(data.responsibilities); }
     if (data.active_projects !== undefined) { updates.push("active_projects = ?"); values.push(data.active_projects); }
     if (data.notes !== undefined) { updates.push("notes = ?"); values.push(data.notes); }
+    if (data.aliases !== undefined) { updates.push("aliases = ?"); values.push(data.aliases); }
+    if (data.category !== undefined) { updates.push("category = ?"); values.push(data.category); }
     if (updates.length > 0) {
       updates.push("updated_at = datetime('now')");
       values.push(existing.id);
@@ -495,9 +522,9 @@ export function upsertTeamMember(data: {
     return existing.id;
   } else {
     const result = db.prepare(`
-      INSERT INTO team_members (name, position, strengths, weaknesses, responsibilities, active_projects, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(data.name, data.position || null, data.strengths || null, data.weaknesses || null, data.responsibilities || null, data.active_projects || null, data.notes || null);
+      INSERT INTO team_members (name, position, strengths, weaknesses, responsibilities, active_projects, notes, aliases, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(data.name, data.position || null, data.strengths || null, data.weaknesses || null, data.responsibilities || null, data.active_projects || null, data.notes || null, data.aliases || null, data.category || 'team');
     return result.lastInsertRowid as number;
   }
 }

@@ -30,6 +30,8 @@ interface TeamMember {
   responsibilities: string | null;
   active_projects: string | null;
   notes: string | null;
+  aliases: string | null;
+  category: string;
   status: string;
 }
 
@@ -225,8 +227,16 @@ function TeamTab() {
           ) : (
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium truncate" data-testid={`text-team-name-${m.id}`}>{m.name}</p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <p className="text-xs font-medium truncate" data-testid={`text-team-name-${m.id}`}>{m.name}</p>
+                  {m.category && m.category !== "team" && (
+                    <Badge variant="outline" data-testid={`badge-team-category-${m.id}`}>
+                      {m.category === "direksi" ? "Direksi" : m.category === "family" ? "Keluarga" : m.category === "management" ? "Mgmt" : m.category}
+                    </Badge>
+                  )}
+                </div>
                 {m.position && <p className="text-[10px] text-muted-foreground truncate" data-testid={`text-team-position-${m.id}`}>{m.position}</p>}
+                {m.aliases && <p className="text-[9px] text-muted-foreground/70 truncate italic" data-testid={`text-team-aliases-${m.id}`}>alias: {m.aliases}</p>}
               </div>
               <div className="flex gap-0.5 shrink-0">
                 <Button

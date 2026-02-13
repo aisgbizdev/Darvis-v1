@@ -51,11 +51,15 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
     - **Decision Fast Mode**: Provides concise 3-bullet summaries with risks, blind spots, and actions when triggered.
     - **Streaming SSE responses**: Real-time word-by-word response delivery.
     - **Secretary System (v2.0)**: Strategic secretary layer in Mirror Mode — manages team members, meetings, action items, and projects.
-        - Database tables: `team_members`, `meetings`, `action_items`, `projects`, `notifications`.
-        - Auto-extraction from conversation: GPT-powered extraction of team profiles, meetings, action items, projects from natural chat in Mirror Mode.
-        - Dynamic context injection: `NODE_TEAM`, `NODE_MEETING`, `NODE_PROJECTS` injected based on intent detection.
+        - Database tables: `team_members` (with `aliases` and `category` columns), `meetings`, `action_items`, `projects`, `notifications`.
+        - **People Database**: 31 seeded people across categories: BD team (14), direksi 5 PT (10), management (3), family (3). Each person can have aliases (e.g., "Tailo" = Nelson Lee, "Mas Ir" = Iriawan).
+        - **Categories**: `team` (BD staff), `direksi` (directors of 5 PTs), `management` (atasan/key people), `family` (keluarga DR), `external` (orang luar).
+        - **Alias Resolution**: `getTeamMemberByNameOrAlias()` checks both name and comma-separated aliases to prevent duplicates when DR uses different names for the same person.
+        - **Auto-Detect Nama Baru (Mirror Mode)**: When DR mentions an unknown name, DARVIS asks "Siapa [nama]?" and saves the answer to the database. NODE_TEAM always injected in Mirror Mode with grouped categories.
+        - Auto-extraction from conversation: GPT-powered extraction of team profiles (with aliases/category), meetings, action items, projects from natural chat in Mirror Mode.
+        - Dynamic context injection: `NODE_TEAM` (always in Mirror), `NODE_MEETING`, `NODE_PROJECTS` injected based on intent detection.
         - Proactive notifications: meeting reminders (30min before), overdue alerts, project deadlines (3 days), daily briefing (6-9am), DARVIS insights (max 2-3x/day).
-        - Secretary Dashboard: accessible via header icon (owner-only), 4 tabs (Tim, Meeting, Action Items, Projects) with full CRUD, inline editing, status toggling.
+        - Secretary Dashboard: accessible via header icon (owner-only), 4 tabs (Tim, Meeting, Action Items, Projects) with full CRUD, inline editing, status toggling. Shows category badges and aliases.
         - Notification Center: bell icon with unread badge, grouped notifications by type.
         - All secretary features owner-only protected.
     - **Key Files**: `server/proactive.ts` (proactive system), `client/src/components/secretary-dashboard.tsx`, `client/src/components/notification-center.tsx`.

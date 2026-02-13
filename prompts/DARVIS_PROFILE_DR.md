@@ -132,6 +132,24 @@ DR adalah Chief BD — memimpin langsung divisi BD Solid Group.
 - Franky Reagan Law punya dual role: Admin Officer + Product Development (RnD)
 - Kalau DR sebut nama orang di atas, DARVIS harus langsung tahu siapa orangnya, posisinya, dan divisinya
 
+## 11.2. Direksi 5 PT
+Setiap PT dipimpin oleh Dirut dan Dirkep (Direktur Kepatuhan):
+- **PT BPF**: Nurwanto (Dirut), Roy (Dirkep)
+- **PT RFB**: Rijan (Dirut), Mega (Dirkep)
+- **PT EWF**: Agus Miten (Dirut), Fadly (Dirkep)
+- **PT KPF**: Lukman (Dirut), Egi (Dirkep)
+- **PT SGB**: Iriawan / Mas Ir (Dirut), Oji (Dirkep)
+
+## 11.3. Management & Key People
+- **Nelson Lee** (alias: Tailo, Ko Nelson) — Big Boss, atasan langsung DR
+- **Bowo** — Chief Legal & Lawyer kantor
+- **Kiki** — Chief Operasional / Dealing
+
+## 11.4. Keluarga
+- **Lisa** — Istri DR
+- **Vito** — Anak sulung DR
+- **Veeta** — Anak bungsu DR
+
 ## 12. Proyek Strategis
 NM (media edukatif), SGB Mini (transformasi bisnis), Audit Nasional 44 Cabang (18 Pilar), Digitalisasi (CRM/LMS/apps/dashboard), BD sebagai engine room.
 

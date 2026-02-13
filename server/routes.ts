@@ -28,6 +28,7 @@ import {
   setSetting,
   getTeamMembers,
   getTeamMemberById,
+  getTeamMemberByNameOrAlias,
   upsertTeamMember,
   updateTeamMember,
   deleteTeamMember,
@@ -740,7 +741,7 @@ function detectActionItemIntent(message: string): boolean {
   return patterns.some((p) => p.test(lower));
 }
 
-function buildSecretaryContext(message: string): string {
+function buildSecretaryContext(message: string, isOwner: boolean = false): string {
   let context = "";
 
   const isTeam = detectTeamIntent(message);
@@ -748,23 +749,33 @@ function buildSecretaryContext(message: string): string {
   const isProject = detectProjectIntent(message);
   const isAction = detectActionItemIntent(message);
 
-  if (isTeam) {
+  if (isTeam || isOwner) {
     const members = getTeamMembers("active");
     if (members.length > 0) {
-      context += `\n\n---\nNODE_TEAM — Data Tim Mas DR:\n`;
+      context += `\n\n---\nNODE_TEAM — Orang-orang yang dikenal DR:\n`;
+      const grouped: Record<string, typeof members> = {};
       for (const m of members) {
-        context += `- **${m.name}**`;
-        if (m.position) context += ` (${m.position})`;
-        const details: string[] = [];
-        if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
-        if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
-        if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
-        if (m.active_projects) details.push(`Project aktif: ${m.active_projects}`);
-        if (m.notes) details.push(`Catatan: ${m.notes}`);
-        if (details.length > 0) context += ` — ${details.join("; ")}`;
-        context += `\n`;
+        const cat = m.category || "team";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(m);
       }
-      context += `Gunakan data tim ini untuk memberikan saran yang kontekstual. Referensi nama dan peran mereka secara natural.`;
+      const catLabels: Record<string, string> = { team: "Tim BD", direksi: "Direksi 5 PT", management: "Management/Atasan", family: "Keluarga", external: "Eksternal" };
+      for (const [cat, catMembers] of Object.entries(grouped)) {
+        context += `\n**${catLabels[cat] || cat}:**\n`;
+        for (const m of catMembers) {
+          context += `- **${m.name}**`;
+          if (m.aliases) context += ` (alias: ${m.aliases})`;
+          if (m.position) context += ` — ${m.position}`;
+          const details: string[] = [];
+          if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
+          if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
+          if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
+          if (m.active_projects) details.push(`Project aktif: ${m.active_projects}`);
+          if (details.length > 0) context += ` | ${details.join("; ")}`;
+          context += `\n`;
+        }
+      }
+      context += `\nKalau DR sebut nama yang TIDAK ada di daftar ini, TANYA siapa orang itu. Kalau sudah ada (termasuk alias), langsung lanjut natural.\n`;
     }
   }
 
@@ -1564,28 +1575,44 @@ export async function registerRoutes(
       const hasSeed = existingPrefs.some(p => p.source_summary === "SEED_FROM_PROFILE");
 
       const existingTeam = getTeamMembers();
-      const hasTeamSeed = existingTeam.some(m => m.notes === "SEED_FROM_PROFILE");
-      if (!hasTeamSeed) {
-        const bdTeam = [
-          { name: "Franky Reagan Law", position: "Admin Officer BD & Product Development RnD", responsibilities: "Support administrasi Chief BD, Product Development di divisi RnD", notes: "SEED_FROM_PROFILE" },
-          { name: "Anita Nur Hidayah", position: "Head Digital Media", responsibilities: "Memimpin divisi Digital Media: Graphic Design, Programmer, Social Media", notes: "SEED_FROM_PROFILE" },
-          { name: "Pindofirnandito K", position: "Graphic Design (Digital Media)", responsibilities: "Desain grafis untuk kebutuhan BD", notes: "SEED_FROM_PROFILE" },
-          { name: "Kresno Nugroho", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
-          { name: "Arya Pramudhita", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
-          { name: "Faturrahman", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
-          { name: "Dessy Syafitrie", position: "Social Media Specialist & Training Internal", responsibilities: "Social media management (Digital Media) + Training internal (MDP). Dual role.", notes: "SEED_FROM_PROFILE" },
-          { name: "Sumarlin Newin Sidabutar", position: "Head MDP (Marketing Develop Program)", responsibilities: "Memimpin divisi MDP: Training Internal & Eksternal", notes: "SEED_FROM_PROFILE" },
-          { name: "Marvy Sammy Breemer", position: "Head RnD (Research and Development)", responsibilities: "Memimpin divisi RnD: Product Development, Host & Copy Writer", notes: "SEED_FROM_PROFILE" },
-          { name: "Muhammad Nurul", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
-          { name: "Yudis Tri Saputro", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
-          { name: "Ayu Dwetiawati", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
-          { name: "Cahyo Purnomo", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
-          { name: "Al Apgani", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+      const hasFullSeed = existingTeam.some(m => m.notes === "SEED_FROM_PROFILE" && m.category === "direksi");
+      if (!hasFullSeed) {
+        const allPeople = [
+          { name: "Franky Reagan Law", position: "Admin Officer BD & Product Development RnD", responsibilities: "Support administrasi Chief BD, Product Development di divisi RnD", notes: "SEED_FROM_PROFILE", aliases: "Franky", category: "team" },
+          { name: "Anita Nur Hidayah", position: "Head Digital Media", responsibilities: "Memimpin divisi Digital Media: Graphic Design, Programmer, Social Media", notes: "SEED_FROM_PROFILE", aliases: "Anita", category: "team" },
+          { name: "Pindofirnandito K", position: "Graphic Design (Digital Media)", responsibilities: "Desain grafis untuk kebutuhan BD", notes: "SEED_FROM_PROFILE", aliases: "Pindo", category: "team" },
+          { name: "Kresno Nugroho", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE", aliases: "Kresno", category: "team" },
+          { name: "Arya Pramudhita", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE", aliases: "Arya", category: "team" },
+          { name: "Faturrahman", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE", aliases: "Fatur", category: "team" },
+          { name: "Dessy Syafitrie", position: "Social Media Specialist & Training Internal", responsibilities: "Social media management (Digital Media) + Training internal (MDP). Dual role.", notes: "SEED_FROM_PROFILE", aliases: "Dessy", category: "team" },
+          { name: "Sumarlin Newin Sidabutar", position: "Head MDP (Marketing Develop Program)", responsibilities: "Memimpin divisi MDP: Training Internal & Eksternal", notes: "SEED_FROM_PROFILE", aliases: "Sumarlin", category: "team" },
+          { name: "Marvy Sammy Breemer", position: "Head RnD (Research and Development)", responsibilities: "Memimpin divisi RnD: Product Development, Host & Copy Writer", notes: "SEED_FROM_PROFILE", aliases: "Marvy", category: "team" },
+          { name: "Muhammad Nurul", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE", aliases: "Nurul", category: "team" },
+          { name: "Yudis Tri Saputro", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE", aliases: "Yudis", category: "team" },
+          { name: "Ayu Dwetiawati", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE", aliases: "Ayu", category: "team" },
+          { name: "Cahyo Purnomo", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE", aliases: "Cahyo", category: "team" },
+          { name: "Al Apgani", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE", aliases: "Al", category: "team" },
+          { name: "Nurwanto", position: "Direktur Utama PT BPF", responsibilities: "Memimpin operasional PT BPF", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Roy", position: "Direktur Kepatuhan PT BPF", responsibilities: "Kepatuhan dan compliance PT BPF", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Rijan", position: "Direktur Utama PT RFB", responsibilities: "Memimpin operasional PT RFB", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Mega", position: "Direktur Kepatuhan PT RFB", responsibilities: "Kepatuhan dan compliance PT RFB", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Agus Miten", position: "Direktur Utama PT EWF", responsibilities: "Memimpin operasional PT EWF", notes: "SEED_FROM_PROFILE", aliases: "Agus", category: "direksi" },
+          { name: "Fadly", position: "Direktur Kepatuhan PT EWF", responsibilities: "Kepatuhan dan compliance PT EWF", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Lukman", position: "Direktur Utama PT KPF", responsibilities: "Memimpin operasional PT KPF", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Egi", position: "Direktur Kepatuhan PT KPF", responsibilities: "Kepatuhan dan compliance PT KPF", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Iriawan", position: "Direktur Utama PT SGB", responsibilities: "Memimpin operasional PT SGB", notes: "SEED_FROM_PROFILE", aliases: "Mas Ir, Ir", category: "direksi" },
+          { name: "Oji", position: "Direktur Kepatuhan PT SGB", responsibilities: "Kepatuhan dan compliance PT SGB", notes: "SEED_FROM_PROFILE", category: "direksi" },
+          { name: "Nelson Lee", position: "Big Boss / Atasan DR", responsibilities: "Pimpinan tertinggi, atasan langsung DR", notes: "SEED_FROM_PROFILE", aliases: "Tailo, Ko Nelson", category: "management" },
+          { name: "Bowo", position: "Chief Legal & Lawyer Kantor", responsibilities: "Legal, hukum, dan kepatuhan perusahaan", notes: "SEED_FROM_PROFILE", category: "management" },
+          { name: "Kiki", position: "Chief Operasional / Dealing", responsibilities: "Operasional dan dealing perusahaan", notes: "SEED_FROM_PROFILE", category: "management" },
+          { name: "Lisa", position: "Istri DR", responsibilities: null, notes: "SEED_FROM_PROFILE", category: "family" },
+          { name: "Vito", position: "Anak sulung DR", responsibilities: null, notes: "SEED_FROM_PROFILE", category: "family" },
+          { name: "Veeta", position: "Anak bungsu DR", responsibilities: null, notes: "SEED_FROM_PROFILE", category: "family" },
         ];
-        for (const member of bdTeam) {
+        for (const member of allPeople) {
           upsertTeamMember(member);
         }
-        console.log(`Secretary: seeded ${bdTeam.length} BD team members`);
+        console.log(`Secretary: seeded ${allPeople.length} people (BD team + direksi + management + family)`);
       }
 
       if (hasSeed) {
@@ -1714,7 +1741,7 @@ GAYA NGOBROL:
       }
 
       if (isOwner) {
-        const secretaryCtx = buildSecretaryContext(message);
+        const secretaryCtx = buildSecretaryContext(message, isOwner);
         if (secretaryCtx) {
           systemContent += secretaryCtx;
         }
@@ -2223,7 +2250,7 @@ async function extractSecretaryData(userMessage: string, assistantReply: string)
   const pendingActions = getPendingActionItems();
 
   const existingContext = [
-    teamMembers.length > 0 ? `Tim yang sudah tercatat: ${teamMembers.map(m => `${m.name} (${m.position || "no position"})`).join(", ")}` : "",
+    teamMembers.length > 0 ? `Orang yang sudah tercatat: ${teamMembers.map(m => `${m.name}${m.aliases ? ` (alias: ${m.aliases})` : ""} [${m.category}]${m.position ? ` — ${m.position}` : ""}`).join(", ")}` : "",
     existingProjects.length > 0 ? `Project yang sudah tercatat: ${existingProjects.map(p => `${p.name} (${p.status})`).join(", ")}` : "",
     pendingActions.length > 0 ? `Action items pending: ${pendingActions.slice(0, 10).map(a => `${a.title} → ${a.assignee || "unassigned"}`).join(", ")}` : "",
   ].filter(Boolean).join("\n");
@@ -2237,7 +2264,7 @@ ${combinedText}
 Ekstrak dalam format JSON dengan struktur:
 {
   "team_members": [
-    { "name": "string", "position": "string|null", "strengths": "string|null", "weaknesses": "string|null", "responsibilities": "string|null", "notes": "string|null" }
+    { "name": "string", "position": "string|null", "strengths": "string|null", "weaknesses": "string|null", "responsibilities": "string|null", "notes": "string|null", "aliases": "comma-separated aliases|null", "category": "team|direksi|family|external|management" }
   ],
   "meetings": [
     { "title": "string", "date_time": "YYYY-MM-DD HH:MM|null", "participants": "comma-separated names|null", "agenda": "string|null" }
@@ -2261,6 +2288,8 @@ RULES:
 - Untuk action items: tangkap instruksi, delegasi, tugas, follow-up yang disebut. Parsing deadline dari bahasa natural.
 - Untuk projects: tangkap project baru atau update status project existing. Parsing deadline dari bahasa natural.
 - follow_ups: tangkap hal-hal yang user bilang "nanti gw..." atau "besok mau..." sebagai reminder. Parsing deadline_hint ke tanggal konkret.
+- PENTING: Jika user menyebut nama orang dan memberikan info tentang orang tersebut (siapa dia, posisi, relasi), SELALU ekstrak ke team_members. Cek daftar existing — jika nama/alias cocok, UPDATE. Jika baru, buat entri baru.
+- Kategori orang: "team" (bawahan/tim BD), "direksi" (direktur PT), "management" (atasan/peers), "family" (keluarga), "external" (orang luar)
 - Jika tidak ada data untuk suatu kategori, kembalikan array kosong
 - Tanggal hari ini: ${new Date().toISOString().split('T')[0]} (${new Date().toLocaleDateString('id-ID', { weekday: 'long' })})
 - Waktu sekarang: ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })} WIB
@@ -2299,15 +2328,32 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.team_members) && parsed.team_members.length > 0) {
       for (const member of parsed.team_members.slice(0, 5)) {
         if (member.name && typeof member.name === "string") {
-          upsertTeamMember({
-            name: member.name,
-            position: member.position || null,
-            strengths: member.strengths || null,
-            weaknesses: member.weaknesses || null,
-            responsibilities: member.responsibilities || null,
-            notes: member.notes || null,
-          });
-          console.log(`Secretary: upserted team member "${member.name}"`);
+          const existingByAlias = getTeamMemberByNameOrAlias(member.name);
+          if (existingByAlias) {
+            upsertTeamMember({
+              name: existingByAlias.name,
+              position: member.position || existingByAlias.position || null,
+              strengths: member.strengths || existingByAlias.strengths || null,
+              weaknesses: member.weaknesses || existingByAlias.weaknesses || null,
+              responsibilities: member.responsibilities || existingByAlias.responsibilities || null,
+              notes: member.notes || existingByAlias.notes || null,
+              aliases: member.aliases || existingByAlias.aliases || null,
+              category: member.category || existingByAlias.category || "external",
+            });
+            console.log(`Secretary: updated existing member "${existingByAlias.name}" (matched from "${member.name}")`);
+          } else {
+            upsertTeamMember({
+              name: member.name,
+              position: member.position || null,
+              strengths: member.strengths || null,
+              weaknesses: member.weaknesses || null,
+              responsibilities: member.responsibilities || null,
+              notes: member.notes || null,
+              aliases: member.aliases || null,
+              category: member.category || "external",
+            });
+            console.log(`Secretary: added new person "${member.name}" [${member.category || "external"}]`);
+          }
         }
       }
     }
