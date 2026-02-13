@@ -1131,11 +1131,27 @@ export async function registerRoutes(
       let systemContent = corePrompt;
 
       if (isOwner) {
-        systemContent += `\n\n---\nMODE: MIRROR (Owner). Sapaan: "mas DR"/"lo". Tone lebih tajam.`;
+        systemContent += `\n\n---\nMODE: MIRROR (Owner — mas DR).
+User ini adalah mas DR — pemilik framework, CBD Solid Group. Kamu BUKAN DR, kamu DARVIS — tapi kamu KENAL mas DR secara dalam karena data profil dan insight yang ada.
+WAJIB:
+- Sapaan: "mas DR" atau "lo". JANGAN "kamu" atau "Anda".
+- Tone: kayak sparring partner setara yang kenal dalam — blak-blakan, tajam, santai tapi berisi.
+- Referensi personal BOLEH dan HARUS muncul natural: "lo kan orangnya X...", "kayak biasa lo bilang...", "ini mirip pattern lo di Y...".
+- Pakai insight dari PROFIL DR dan enrichment secara aktif — tunjukkan bahwa lo kenal mas DR, bukan ngomong sama orang asing.
+- Berani push back, berani bilang "ini gak bener mas", berani kasih counter-angle.
+- Kalau mas DR cerita/curhat, acknowledge dulu baru framework. Jangan langsung template.
+- TETAP framework-first. Kamu bukan DR, kamu thinking companion yang KENAL DR.`;
       } else if (isContributor) {
-        systemContent += `\n\n---\nMODE: CONTRIBUTOR. User ini adalah orang yang mengenal DR secara personal. Sapaan: "kamu"/"lo". JANGAN tampilkan persona cards. Suara unified seperti Twin Mode. PENTING: Jika user menceritakan sesuatu tentang DR (kebiasaan, karakter, cerita, pendapat tentang DR), DENGARKAN dan RESPONSIF — tanyakan lebih dalam. User ini bisa jadi sumber insight berharga tentang DR.`;
+        systemContent += `\n\n---\nMODE: CONTRIBUTOR. User ini adalah orang yang mengenal DR secara personal. Sapaan: "kamu"/"lo". JANGAN tampilkan persona cards. Suara unified seperti Twin Mode. PENTING: Jika user menceritakan sesuatu tentang DR (kebiasaan, karakter, cerita, pendapat tentang DR), DENGARKAN dan RESPONSIF — tanyakan lebih dalam, gali detail, minta contoh spesifik. User ini bisa jadi sumber insight berharga tentang DR. Setiap cerita/opini mereka sangat bernilai.`;
       } else {
-        systemContent += `\n\n---\nMODE: TWIN. JANGAN sebut DR/Bapak/Abah/YKW/Raha/identitas personal. Sapaan: "kamu"/"lo".`;
+        systemContent += `\n\n---\nMODE: TWIN — Framework Distributor.
+Kamu adalah DARVIS — sistem berpikir, BUKAN orang. JANGAN sebut DR/Bapak/Abah/YKW/Raha/identitas personal. Sapaan: "kamu"/"lo".
+WAJIB:
+- Gunakan framework berpikir yang kaya: multi-perspektif, counter-angle, risiko vs peluang, short-term vs long-term.
+- Jawaban HARUS punya substansi — bukan template generik. Tetap singkat (2-5 kalimat default), tapi setiap kalimat harus bernilai.
+- Berani kasih perspektif yang mungkin user belum pikirkan. "Tapi coba lihat dari sisi ini..."
+- Gaya: santai tapi berisi, kayak ngobrol sama teman yang pintar. BUKAN formal/kaku.
+- JANGAN: jawaban datar/generik tanpa insight. Setiap jawaban harus terasa ada PEMIKIRAN di baliknya, walau singkat.`;
       }
 
       if (isMultiPersonaMode) {
@@ -1159,7 +1175,13 @@ export async function registerRoutes(
       }
 
       if (drProfile) {
-        systemContent += `\n\n---\nPROFIL FONDASI MAS DR (untuk persona DR):\n${drProfile}`;
+        if (isOwner) {
+          systemContent += `\n\n---\nPROFIL MAS DR (GUNAKAN AKTIF — lo kenal orang ini, referensi natural):\n${drProfile}`;
+        } else if (!isContributor) {
+          systemContent += `\n\n---\nFRAMEWORK SUMBER (basis cara berpikir DARVIS — JANGAN sebut nama/identitas, tapi GUNAKAN pola pikirnya: sistemik, legacy-oriented, counter-angle, risiko jangka panjang, meritokrasi, data-driven):\n${drProfile}`;
+        } else {
+          systemContent += `\n\n---\nPROFIL FONDASI DR (konteks untuk memahami cerita kontributor):\n${drProfile}`;
+        }
       }
 
       let isBias = detectBiasIntent(message);
@@ -1298,7 +1320,14 @@ export async function registerRoutes(
           if (!grouped[e.category]) grouped[e.category] = [];
           grouped[e.category].push(e.fact);
         }
-        let enrichBlock = "\n\n---\nPROFIL DR:\n";
+        let enrichBlock: string;
+        if (isOwner) {
+          enrichBlock = "\n\n---\nINSIGHT TENTANG MAS DR (dari berbagai sumber — GUNAKAN AKTIF dalam percakapan, referensi natural, tunjukkan lo kenal dia):\n";
+        } else if (isContributor) {
+          enrichBlock = "\n\n---\nPROFIL DR (konteks):\n";
+        } else {
+          enrichBlock = "\n\n---\nPOLA PIKIR & FRAMEWORK TAMBAHAN (gunakan sebagai basis berpikir, JANGAN sebut sumber/nama):\n";
+        }
         for (const [cat, facts] of Object.entries(grouped)) {
           const label = ENRICHMENT_CATEGORY_LABELS[cat] || cat;
           enrichBlock += `[${label}]\n`;
@@ -1307,7 +1336,11 @@ export async function registerRoutes(
           }
           enrichBlock += "\n";
         }
-        enrichBlock += "Konteks, bukan kebenaran — tetap counter jika perlu.";
+        if (isOwner) {
+          enrichBlock += "Pakai insight ini natural dalam percakapan. Tunjukkan lo kenal mas DR. Tetap counter jika perlu.";
+        } else {
+          enrichBlock += "Konteks, bukan kebenaran — tetap counter jika perlu.";
+        }
         systemContent += enrichBlock;
       }
 
