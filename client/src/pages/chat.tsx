@@ -301,10 +301,32 @@ export default function ChatPage() {
     conversationModeRef.current = conversationMode;
   }, [conversationMode]);
 
+  const unlockAudioRef = useRef(false);
+
+  const unlockAudio = useCallback(() => {
+    if (unlockAudioRef.current) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      ctx.resume();
+      const silentAudio = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+      silentAudio.volume = 0.01;
+      silentAudio.play().catch(() => {});
+      unlockAudioRef.current = true;
+    } catch {}
+  }, []);
+
   const playTts = useCallback(async (text: string) => {
     try {
       if (ttsAudioRef.current) {
         ttsAudioRef.current.pause();
+        if (ttsAudioRef.current.src && ttsAudioRef.current.src.startsWith("blob:")) {
+          URL.revokeObjectURL(ttsAudioRef.current.src);
+        }
         ttsAudioRef.current = null;
       }
       setTtsPlaying(true);
@@ -339,6 +361,7 @@ export default function ChatPage() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      audio.volume = 1.0;
       ttsAudioRef.current = audio;
 
       audio.onended = () => {
@@ -358,9 +381,29 @@ export default function ChatPage() {
         setTtsPlaying(false);
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
+        if (conversationModeRef.current && recognitionRef.current) {
+          try {
+            setInput("");
+            recognitionRef.current.start();
+            setIsListening(true);
+          } catch {}
+        }
       };
 
-      await audio.play();
+      try {
+        await audio.play();
+      } catch {
+        setTtsPlaying(false);
+        URL.revokeObjectURL(url);
+        ttsAudioRef.current = null;
+        if (conversationModeRef.current && recognitionRef.current) {
+          try {
+            setInput("");
+            recognitionRef.current.start();
+            setIsListening(true);
+          } catch {}
+        }
+      }
     } catch {
       setTtsPlaying(false);
     }
@@ -511,6 +554,7 @@ export default function ChatPage() {
         silenceTimerRef.current = null;
       }
     } else {
+      unlockAudio();
       setConversationMode(true);
       if (recognitionRef.current && !isListening) {
         setInput("");
@@ -520,7 +564,7 @@ export default function ChatPage() {
         } catch {}
       }
     }
-  }, [conversationMode, isListening, stopTts]);
+  }, [conversationMode, isListening, stopTts, unlockAudio]);
 
   const handleLogin = useCallback(async () => {
     setLoginError("");
@@ -1424,7 +1468,7 @@ export default function ChatPage() {
             msg.role === "user" ? (
               <UserBubble key={i} content={msg.content} index={i} images={msg.images} />
             ) : (
-              <AssistantBubble key={i} content={msg.content} index={i} isOwner={isOwner} onPlay={playTts} isTtsPlaying={ttsPlaying} />
+              <AssistantBubble key={i} content={msg.content} index={i} isOwner={isOwner} onPlay={(text) => { unlockAudio(); playTts(text); }} isTtsPlaying={ttsPlaying} />
             ),
           )}
 
