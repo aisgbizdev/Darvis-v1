@@ -42,30 +42,6 @@ function MarkdownContent({ content, className = "" }: { content: string; classNa
   );
 }
 
-interface ParsedVoices {
-  broto: string | null;
-  rara: string | null;
-  rere: string | null;
-  dr: string | null;
-}
-
-function parseQuadVoice(text: string): ParsedVoices | null {
-  const brotoMatch = text.match(/Broto:\s*([\s\S]*?)(?=\n\s*(?:Rara|Rere|DR)\s*:|$)/i);
-  const raraMatch = text.match(/Rara:\s*([\s\S]*?)(?=\n\s*(?:Rere|DR)\s*:|$)/i);
-  const rereMatch = text.match(/Rere:\s*([\s\S]*?)(?=\n\s*DR\s*:|$)/i);
-  const drMatch = text.match(/DR:\s*([\s\S]*?)$/i);
-
-  const hasAny = brotoMatch || raraMatch || rereMatch || drMatch;
-  if (!hasAny) return null;
-
-  return {
-    broto: brotoMatch ? brotoMatch[1].trim() : null,
-    rara: raraMatch ? raraMatch[1].trim() : null,
-    rere: rereMatch ? rereMatch[1].trim() : null,
-    dr: drMatch ? drMatch[1].trim() : null,
-  };
-}
-
 const PERSONA_CONFIG = {
   broto: {
     label: "Broto",
@@ -101,45 +77,7 @@ const PERSONA_CONFIG = {
   },
 } as const;
 
-function PersonaCard({ persona, content, index }: { persona: keyof typeof PERSONA_CONFIG; content: string; index: number }) {
-  const config = PERSONA_CONFIG[persona];
-  const Icon = config.icon;
-
-  return (
-    <div className="flex gap-0">
-      <div className={`w-1 shrink-0 rounded-full ${config.accentClass} opacity-40`} />
-      <Card className="p-2.5 sm:p-3 bg-card border-card-border flex-1 ml-2">
-        <div className="flex items-center gap-2 mb-1.5">
-          <div className={`w-5 h-5 rounded-md ${config.bgClass} flex items-center justify-center shrink-0`} data-testid={`icon-${persona}-${index}`}>
-            <Icon className={`w-3 h-3 ${config.textClass}`} />
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className={`text-xs font-semibold ${config.textClass}`} data-testid={`label-${persona}-${index}`}>{config.label}</span>
-            <span className="text-[9px] text-muted-foreground hidden sm:inline">{config.subtitle}</span>
-          </div>
-        </div>
-        <div data-testid={`text-${persona}-${index}`}>
-          <MarkdownContent content={content} />
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 function AssistantBubble({ content, index, isOwner }: { content: string; index: number; isOwner: boolean }) {
-  const parsed = isOwner ? parseQuadVoice(content) : null;
-
-  if (parsed && (parsed.broto || parsed.rara || parsed.rere || parsed.dr)) {
-    return (
-      <div className="flex flex-col gap-2 max-w-full sm:max-w-[85%] md:max-w-[75%]" data-testid={`bubble-assistant-${index}`}>
-        {parsed.broto && <PersonaCard persona="broto" content={parsed.broto} index={index} />}
-        {parsed.rara && <PersonaCard persona="rara" content={parsed.rara} index={index} />}
-        {parsed.rere && <PersonaCard persona="rere" content={parsed.rere} index={index} />}
-        {parsed.dr && <PersonaCard persona="dr" content={parsed.dr} index={index} />}
-      </div>
-    );
-  }
-
   return (
     <Card className="p-2.5 sm:p-3 max-w-full sm:max-w-[85%] md:max-w-[75%] bg-card border-card-border" data-testid={`bubble-assistant-${index}`}>
       <div data-testid={`text-assistant-${index}`}>

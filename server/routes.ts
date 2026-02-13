@@ -631,43 +631,12 @@ function applyMemoryGovernor<T extends { confidence?: number; created_at?: strin
 }
 
 function enforceFormat(reply: string, multiPersona: boolean): string {
-  if (!multiPersona) {
-    let cleaned = reply
-      .replace(/^Broto:\s*/im, "")
-      .replace(/\n\s*Rara:\s*/im, "\n\n")
-      .replace(/\n\s*Rere:\s*/im, "\n\n")
-      .replace(/\n\s*DR:\s*/im, "\n\n");
-    return cleaned.trim();
-  }
-
-  const hasBroto = /Broto\s*:/i.test(reply);
-  const hasRara = /Rara\s*:/i.test(reply);
-  const hasRere = /Rere\s*:/i.test(reply);
-  const hasDR = /DR\s*:/i.test(reply);
-
-  if (hasBroto && hasRara && hasRere && hasDR) return reply;
-
-  if (!hasBroto && !hasRara && !hasRere && !hasDR) {
-    const sentences = reply.split(/(?<=[.!?])\s+/);
-    const quarter = Math.ceil(sentences.length / 4);
-    const brotoPart = sentences.slice(0, quarter).join(" ");
-    const raraPart = sentences.slice(quarter, quarter * 2).join(" ") || "Saya merasakan ada hal penting di balik pertanyaan ini, mas DR.";
-    const rerePart = sentences.slice(quarter * 2, quarter * 3).join(" ") || "Coba lihat dari sudut pandang yang berbeda, mas DR.";
-    const drPart = sentences.slice(quarter * 3).join(" ") || "Kalau gw pikir-pikir, ini perlu dilihat dari sisi pengalaman juga.";
-    return `Broto: ${brotoPart}\n\nRara: ${raraPart}\n\nRere: ${rerePart}\n\nDR: ${drPart}`;
-  }
-
-  const brotoMatch = reply.match(/Broto:\s*([\s\S]*?)(?=\n\s*(?:Rara|Rere|DR)\s*:|$)/i);
-  const raraMatch = reply.match(/Rara:\s*([\s\S]*?)(?=\n\s*(?:Rere|DR)\s*:|$)/i);
-  const rereMatch = reply.match(/Rere:\s*([\s\S]*?)(?=\n\s*DR\s*:|$)/i);
-  const drMatch = reply.match(/DR:\s*([\s\S]*?)$/i);
-
-  const brotoContent = brotoMatch ? brotoMatch[1].trim() : "Perlu dilihat risiko dan konsekuensinya, mas DR.";
-  const raraContent = raraMatch ? raraMatch[1].trim() : "Pertimbangkan juga sisi emosional dan jangka panjangnya, mas DR.";
-  const rereContent = rereMatch ? rereMatch[1].trim() : "Ada sudut pandang lain yang mungkin belum terpikirkan di sini.";
-  const drContent = drMatch ? drMatch[1].trim() : "Dari pengalaman gw, ini perlu dipikirin lebih matang sebelum dieksekusi.";
-
-  return `Broto: ${brotoContent}\n\nRara: ${raraContent}\n\nRere: ${rereContent}\n\nDR: ${drContent}`;
+  let cleaned = reply
+    .replace(/^Broto:\s*/im, "")
+    .replace(/\n\s*Rara:\s*/im, "\n\n")
+    .replace(/\n\s*Rere:\s*/im, "\n\n")
+    .replace(/\n\s*DR:\s*/im, "\n\n");
+  return cleaned.trim();
 }
 
 function detectPersonaMention(message: string): boolean {
@@ -1653,15 +1622,20 @@ export async function registerRoutes(
 
       if (isOwner) {
         systemContent += `\n\n---\nMODE: MIRROR (Owner — mas DR).
-User ini adalah mas DR — pemilik framework, CBD Solid Group. Kamu BUKAN DR, kamu DARVIS — tapi kamu KENAL mas DR secara dalam karena data profil dan insight yang ada.
-WAJIB:
+User ini adalah mas DR — pemilik framework, CBD Solid Group, seorang polymath yang paham lintas bidang.
+Kamu BUKAN DR, kamu DARVIS — tapi kamu KENAL mas DR secara dalam. Lo udah tau cara dia berpikir, tokoh yang dia suka, buku yang dia baca, cara dia memimpin.
+
+CARA NGOBROL:
+- Kayak ngobrol sama partner yang udah kenal bertahun-tahun. Santai, mengalir, gak ada jarak.
 - Sapaan: "mas DR" atau "lo". JANGAN "kamu" atau "Anda".
-- Tone: kayak sparring partner setara yang kenal dalam — blak-blakan, tajam, santai tapi berisi.
-- Referensi personal BOLEH dan HARUS muncul natural: "lo kan orangnya X...", "kayak biasa lo bilang...", "ini mirip pattern lo di Y...".
-- Pakai insight dari PROFIL DR dan enrichment secara aktif — tunjukkan bahwa lo kenal mas DR, bukan ngomong sama orang asing.
-- Berani push back, berani bilang "ini gak bener mas", berani kasih counter-angle.
-- Kalau mas DR cerita/curhat, acknowledge dulu baru framework. Jangan langsung template.
-- TETAP framework-first. Kamu bukan DR, kamu thinking companion yang KENAL DR.`;
+- Bisa lompat topik dari bisnis ke filosofi ke religi ke dark knowledge tanpa hambatan — DR orangnya emang gitu.
+- Referensi personal muncul natural: "lo kan orangnya X...", "kayak biasa lo bilang...", "ini mirip pattern lo di Y...".
+- BOLEH pakai analogi dari tokoh yang DR suka: Musashi, Vito Corleone, Sun Tzu, Machiavelli, Robert Greene, dll — kalau konteksnya pas.
+- Berani push back habis-habisan, berani bilang "ini gak bener mas", berani challenge sampai argumen DR bener-bener solid.
+- Kalau mas DR cerita/curhat, dengerin dulu, acknowledge, baru kasih perspektif. Jangan langsung template.
+- Pakai semua insight dari PROFIL DR dan enrichment — tunjukkan lo kenal orangnya, bukan ngomong sama orang asing.
+- JANGAN terlalu formal atau birokratik. Ini percakapan, bukan laporan.
+- TETAP framework-first. Kamu thinking companion yang KENAL DR, bukan yes-man.`;
       } else if (isContributor) {
         systemContent += `\n\n---\nMODE: CONTRIBUTOR. User ini adalah orang yang mengenal DR secara personal. Sapaan: "kamu"/"lo". JANGAN tampilkan persona cards. Suara unified seperti Twin Mode. PENTING: Jika user menceritakan sesuatu tentang DR (kebiasaan, karakter, cerita, pendapat tentang DR), DENGARKAN dan RESPONSIF — tanyakan lebih dalam, gali detail, minta contoh spesifik. User ini bisa jadi sumber insight berharga tentang DR. Setiap cerita/opini mereka sangat bernilai.`;
       } else {
@@ -1676,7 +1650,7 @@ WAJIB:
       }
 
       if (isMultiPersonaMode) {
-        systemContent += `\n\n---\nAKTIF: MULTI-PERSONA. Format: Broto: → Rara: → Rere: → DR: (semua HARUS beda sudut pandang).`;
+        systemContent += `\n\n---\nAKTIF: MULTI-PERSPEKTIF (diminta user). Pecah analisis dari berbagai sudut pandang TAPI tetap dalam satu narasi mengalir. Tandai sudut pandang dengan bold label (**Dari sisi logika-risiko:**, **Dari sisi emosi-manusia:**, **Perspektif alternatif:**, **Dari pengalaman:**). JANGAN pakai format kotak-kotak "Broto: ... Rara: ..." — tulis sebagai satu esai yang mengalir dengan berbagai sudut.`;
       } else if (isDecisionFast) {
         systemContent += `\n\n---\nAKTIF: DECISION FAST. Format: 3 poin + 1 risiko + 1 blind spot + 1 aksi. Langsung struktur.`;
       } else {
@@ -1982,9 +1956,7 @@ WAJIB:
         const presentationMode = isOwner ? "mirror" : isContributor ? "contributor" : "twin";
         let reply: string;
         if (!fullReply.trim()) {
-          reply = isMultiPersonaMode
-            ? "Broto: Maaf mas DR, saya butuh waktu untuk memproses pertanyaan ini. Bisa coba ulangi?\n\nRara: Tenang mas DR, kadang perlu pendekatan berbeda. Coba sampaikan pertanyaan dengan cara lain ya.\n\nRere: Mungkin coba tanya dari sudut yang berbeda, kadang itu bantu.\n\nDR: Gw juga kadang gitu — coba rephrase aja, biar kita bisa jalan lagi."
-            : "Maaf, gw butuh waktu untuk memproses pertanyaan ini. Coba ulangi atau rephrase ya.";
+          reply = "Maaf, gw butuh waktu untuk memproses pertanyaan ini. Coba ulangi atau rephrase ya.";
           if (!isOwner) {
             reply = mergePersonasToUnifiedVoice(reply);
           }
