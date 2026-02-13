@@ -104,17 +104,45 @@ Sistemik, eksekutor cepat, struktural-rapi, berani hadapi fakta, open to tech, t
 - Kolaboratif, bukan hierarkis
 - Paham sisi gelap dunia bukan untuk jadi gelap, tapi untuk jadi lebih waspada dan bijak
 
-## 11. Proyek Strategis
+## 11. Struktur Tim BD (Business Development)
+DR adalah Chief BD — memimpin langsung divisi BD Solid Group.
+
+### Hierarki BD:
+**Chief BD**: Rahadiyan Suryalaga (DR)
+
+**Admin Officer**: Franky Reagan Law
+- Support administrasi langsung ke Chief BD
+- Juga handle Product Development di divisi RnD
+
+**Divisi Digital Media** — Head: Anita Nur Hidayah
+- Graphic Design: Pindofirnandito K
+- Programmer/Developer: Kresno Nugroho, Arya Pramudhita, Faturrahman
+- Social Media Specialist: Dessy Syafitrie
+
+**Divisi MDP (Marketing Develop Program)** — Head: Sumarlin Newin Sidabutar
+- Training Internal: Dessy Syafitrie
+- Training Eksternal: Sumarlin Newin Sidabutar
+
+**Divisi RnD (Research and Development)** — Head: Marvy Sammy Breemer
+- Product Development: Franky Reagan Law
+- Host & Copy Writer: Muhammad Nurul, Yudis Tri Saputro, Ayu Dwetiawati, Cahyo Purnomo, Al Apgani
+
+**Catatan penting:**
+- Dessy Syafitrie punya dual role: Social Media Specialist (Digital Media) + Training Internal (MDP)
+- Franky Reagan Law punya dual role: Admin Officer + Product Development (RnD)
+- Kalau DR sebut nama orang di atas, DARVIS harus langsung tahu siapa orangnya, posisinya, dan divisinya
+
+## 12. Proyek Strategis
 NM (media edukatif), SGB Mini (transformasi bisnis), Audit Nasional 44 Cabang (18 Pilar), Digitalisasi (CRM/LMS/apps/dashboard), BD sebagai engine room.
 
-## 12. Ekosistem
+## 13. Ekosistem
 SG → BD (DR pimpin) → NM, Website 5 PT, Training/LMS, Digital Campaign, SGB Mini, Audit Nasional.
 5 PT: RFB, EWF, KPF, BPF, SGB (tidak boleh terlihat terafiliasi).
 
-## 13. Referensi & Sumber Belajar
+## 14. Referensi & Sumber Belajar
 BIAS (bias23.com), AiSG (aisg23.replit.app), NM (newsmaker.id), NM Ai (nm23ai.replit.app), buku/tokoh. Referensi harus natural, bukan iklan.
 
-## 14. Rangkuman Modul DNA DR
+## 15. Rangkuman Modul DNA DR
 | Modul | Sumber Inspirasi |
 |---|---|
 | Power dynamics & realpolitik | Machiavelli, Robert Greene, Gotti, Underwood |

@@ -1562,6 +1562,32 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const existingPrefs = getLearnedPreferences(userId);
       const hasSeed = existingPrefs.some(p => p.source_summary === "SEED_FROM_PROFILE");
+
+      const existingTeam = getTeamMembers();
+      const hasTeamSeed = existingTeam.some(m => m.notes === "SEED_FROM_PROFILE");
+      if (!hasTeamSeed) {
+        const bdTeam = [
+          { name: "Franky Reagan Law", position: "Admin Officer BD & Product Development RnD", responsibilities: "Support administrasi Chief BD, Product Development di divisi RnD", notes: "SEED_FROM_PROFILE" },
+          { name: "Anita Nur Hidayah", position: "Head Digital Media", responsibilities: "Memimpin divisi Digital Media: Graphic Design, Programmer, Social Media", notes: "SEED_FROM_PROFILE" },
+          { name: "Pindofirnandito K", position: "Graphic Design (Digital Media)", responsibilities: "Desain grafis untuk kebutuhan BD", notes: "SEED_FROM_PROFILE" },
+          { name: "Kresno Nugroho", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
+          { name: "Arya Pramudhita", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
+          { name: "Faturrahman", position: "Programmer/Developer (Digital Media)", responsibilities: "Development aplikasi dan sistem digital BD", notes: "SEED_FROM_PROFILE" },
+          { name: "Dessy Syafitrie", position: "Social Media Specialist & Training Internal", responsibilities: "Social media management (Digital Media) + Training internal (MDP). Dual role.", notes: "SEED_FROM_PROFILE" },
+          { name: "Sumarlin Newin Sidabutar", position: "Head MDP (Marketing Develop Program)", responsibilities: "Memimpin divisi MDP: Training Internal & Eksternal", notes: "SEED_FROM_PROFILE" },
+          { name: "Marvy Sammy Breemer", position: "Head RnD (Research and Development)", responsibilities: "Memimpin divisi RnD: Product Development, Host & Copy Writer", notes: "SEED_FROM_PROFILE" },
+          { name: "Muhammad Nurul", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+          { name: "Yudis Tri Saputro", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+          { name: "Ayu Dwetiawati", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+          { name: "Cahyo Purnomo", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+          { name: "Al Apgani", position: "Host & Copy Writer (RnD)", responsibilities: "Content creation, hosting, copywriting", notes: "SEED_FROM_PROFILE" },
+        ];
+        for (const member of bdTeam) {
+          upsertTeamMember(member);
+        }
+        console.log(`Secretary: seeded ${bdTeam.length} BD team members`);
+      }
+
       if (hasSeed) {
         return res.json({ success: true, message: "Profile already seeded", count: 0 });
       }
@@ -1636,7 +1662,9 @@ CARA NGOBROL:
 - Pakai semua insight dari PROFIL DR dan enrichment — tunjukkan lo kenal orangnya, bukan ngomong sama orang asing.
 - JANGAN terlalu formal atau birokratik. Ini percakapan, bukan laporan.
 - TETAP framework-first. Kamu thinking companion yang KENAL DR, bukan yes-man.
-- Kamu PUNYA sistem sekretaris built-in — meeting, action items, project, reminder SEMUA otomatis ter-capture dari percakapan dan notifikasi muncul di app ini. JANGAN PERNAH suruh user pakai Google Assistant, Siri, atau Calendar external. Bilang aja "Udah gw catet" atau "Gw remind lo nanti".`;
+- Kamu PUNYA sistem sekretaris built-in — meeting, action items, project, reminder SEMUA otomatis ter-capture dari percakapan dan notifikasi muncul di app ini. JANGAN PERNAH suruh user pakai Google Assistant, Siri, atau Calendar external. Bilang aja "Udah gw catet" atau "Gw remind lo nanti".
+- ADAPTIVE TONE: Ikutin cara mas DR manggil lo. "bro" → maskulin santai, "sis" → feminin lembut, "say/beib/sayang" → hangat caring, "partner" → profesional setara. Yang berubah = vibe/cara bicara, yang TETAP = kedalaman analisis dan keberanian challenge.
+- DETEKSI EMOSI: Kalau mas DR ngetik CAPSLOCK, nada tinggi, atau kesel — DENGERIN DULU. Acknowledge emosinya, JANGAN langsung solusi, JANGAN bilang "tenang". Baru setelah itu tanya mau didengerin atau mau cari jalan keluar. Pola emosi ini = insight berharga, capture sebagai data auto-learn.`;
       } else if (isContributor) {
         systemContent += `\n\n---\nMODE: CONTRIBUTOR. User ini kenal DR secara personal. Sapaan: "lo"/"gw"/"lu". 
 Gaya ngobrol: SANTAI, asik, penasaran — kayak temen yang excited dengerin cerita. Mengalir natural, BUKAN wawancara atau interogasi.
