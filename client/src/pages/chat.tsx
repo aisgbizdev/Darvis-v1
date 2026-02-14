@@ -286,8 +286,9 @@ export default function ChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showVoiceSelector]);
 
-  const { data: sessionData } = useQuery<{ isOwner: boolean; isContributor: boolean; mode: string }>({
+  const { data: sessionData } = useQuery<{ isOwner: boolean; isContributor: boolean; mode: string; contributorTeamMemberId: number | null; contributorTeamMemberName: string | null }>({
     queryKey: ["/api/session-info"],
+    refetchInterval: isContributor ? 5000 : false,
   });
 
   useEffect(() => {
@@ -1151,7 +1152,7 @@ export default function ChatPage() {
           <div>
             <h1 className="text-sm font-bold tracking-tight leading-none" data-testid="text-app-title">DARVIS</h1>
             <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid="text-app-version">
-              {isOwner ? "Mirror Mode" : isContributor ? "Contributor Mode" : "Thinking Companion"} v2.0
+              {isOwner ? "Mirror Mode" : isContributor ? (sessionData?.contributorTeamMemberName ? `Hi, ${sessionData.contributorTeamMemberName}` : "Contributor Mode") : "Thinking Companion"} v2.0
             </p>
           </div>
         </div>
@@ -1517,7 +1518,9 @@ export default function ChatPage() {
                 {isOwner
                   ? "Yo, mau ngobrolin apa nih? Gw siap sparring."
                   : isContributor
-                  ? "Contributor Mode. Ceritakan pengalaman lo bareng DR — insight lo berharga buat DARVIS."
+                  ? sessionData?.contributorTeamMemberName
+                    ? `Halo ${sessionData.contributorTeamMemberName}! Yuk ngobrol — ceritain tentang lo dan kerjaan lo.`
+                    : "Contributor Mode. Sebutin nama lo dulu biar DARVIS kenal, atau langsung cerita tentang DR."
                   : "Tony Stark punya JARVIS, lu punya DARVIS. Partner diskusi lu."}
               </p>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 justify-center mt-5 sm:mt-6 w-full max-w-sm sm:max-w-none px-4 sm:px-0">
@@ -1528,11 +1531,17 @@ export default function ChatPage() {
                       "Gw butuh sudut pandang lain",
                     ]
                   : isContributor
-                  ? [
-                      "Gw mau cerita tentang DR",
-                      "DR tuh orangnya kayak gini...",
-                      "Menurut gw, DR itu...",
-                    ]
+                  ? sessionData?.contributorTeamMemberName
+                    ? [
+                        "Gw ceritain soal kerjaan gw",
+                        "Gaya kerja gw tuh kayak gini...",
+                        "Yang bikin gw kesel di kerjaan...",
+                      ]
+                    : [
+                        "Gw mau cerita tentang DR",
+                        "DR tuh orangnya kayak gini...",
+                        "Menurut gw, DR itu...",
+                      ]
                   : [
                       "Bantu gw pikirin keputusan ini",
                       "Gw butuh strategi nih",

@@ -32,6 +32,7 @@ import {
   getTeamMembers,
   getTeamMemberById,
   getTeamMemberByNameOrAlias,
+  type TeamMember,
   upsertTeamMember,
   updateTeamMember,
   deleteTeamMember,
@@ -1829,6 +1830,42 @@ export async function registerRoutes(
       }
 
       const drProfile = readPromptFile("DARVIS_PROFILE_DR.md");
+
+      if (isContributor && !req.session.contributorTeamMemberId) {
+        const msgLower = message.toLowerCase().trim();
+        let matched: TeamMember | undefined;
+        matched = getTeamMemberByNameOrAlias(msgLower);
+        if (!matched) {
+          const allMembers = getTeamMembers();
+          const wordBoundaryMatch = (text: string, term: string): boolean => {
+            if (term.length < 3) return false;
+            const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const regex = new RegExp(`\\b${escaped}\\b`, "i");
+            return regex.test(text);
+          };
+          for (const m of allMembers) {
+            if (wordBoundaryMatch(msgLower, m.name.toLowerCase())) {
+              matched = m;
+              break;
+            }
+            if (m.aliases) {
+              const aliasList = m.aliases.split(",").map(a => a.trim().toLowerCase());
+              for (const alias of aliasList) {
+                if (alias && wordBoundaryMatch(msgLower, alias)) {
+                  matched = m;
+                  break;
+                }
+              }
+              if (matched) break;
+            }
+          }
+        }
+        if (matched) {
+          req.session.contributorTeamMemberId = matched.id;
+          req.session.contributorTeamMemberName = matched.name;
+          console.log(`Contributor auto-identified as "${matched.name}" from message`);
+        }
+      }
 
       const nodesUsed: string[] = [];
       const isMultiPersonaMode = isOwner ? detectMultiPersonaIntent(message) : false;

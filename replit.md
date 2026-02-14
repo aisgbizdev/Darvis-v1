@@ -39,6 +39,7 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
         - **Mirror Mode (Owner only)**: Full persona cards, sharper tone, owner identity references, preferences panel, profile enrichment.
         - **Twin Mode (Default for all users)**: Unified voice, no persona labels, no owner identity references, framework-first approach.
         - **Contributor Mode (Password-protected)**: Unified voice like Twin, but DARVIS knows user kenal DR. Every message auto-extracted as profile enrichment → stored to shared pool (`contributor_shared`). Owner's prompt pulls from both own enrichments and contributor pool.
+        - **Contributor Self-Profile (v2.0)**: After login, DARVIS asks contributor's name. If matched to team_members (via name/alias), session stores `contributorTeamMemberId`/`contributorTeamMemberName`. DARVIS becomes natural interviewer, extracting persona data (job desk, work_style, communication_style, triggers, commitments, personality_notes) from conversation. Auto-detection from message content + `/api/contributor-identify` endpoint. Dual extraction: DR enrichment + self persona. Fallback to regular Contributor if name not matched.
         - Server-side transformation (`mergePersonasToUnifiedVoice()`, `redactOwnerIdentity()`) to adapt output based on presentation mode.
         - Single login field — password determines mode (Owner vs Contributor vs wrong).
     - **Persona System (v2.0)**:
