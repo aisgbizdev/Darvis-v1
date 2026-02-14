@@ -2067,7 +2067,7 @@ GAYA NGOBROL:
         const stream = await openai.chat.completions.create({
           model: "gpt-5",
           messages: apiMessages,
-          max_completion_tokens: voiceMode ? 300 : 2048,
+          max_completion_tokens: voiceMode ? 300 : 800,
           stream: true,
         }, { signal: abortController.signal });
 
