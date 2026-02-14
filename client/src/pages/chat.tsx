@@ -104,7 +104,7 @@ function UserBubble({ content, index, images }: { content: string; index: number
     <div className="flex justify-end" data-testid={`bubble-user-${index}`}>
       <div className="px-3 py-2 rounded-md bg-primary text-primary-foreground max-w-[90%] sm:max-w-[75%]">
         {images && images.length > 0 && (
-          <div className={`flex flex-wrap gap-1.5 mb-2 ${images.length === 1 ? "" : "grid grid-cols-2"}`} data-testid={`images-user-${index}`}>
+          <div className={`flex flex-wrap gap-1.5 mb-2 ${images.length === 1 ? "" : images.length <= 4 ? "grid grid-cols-2" : "grid grid-cols-3"}`} data-testid={`images-user-${index}`}>
             {images.map((img, imgIdx) => (
               <img
                 key={imgIdx}
@@ -890,7 +890,7 @@ export default function ChatPage() {
   const addImages = useCallback(async (files: File[]) => {
     const imageFiles = files.filter((f) => f.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
-    const maxTotal = 5;
+    const maxTotal = 10;
     const toProcess = imageFiles.slice(0, maxTotal - attachedImages.length);
     if (toProcess.length === 0) return;
     const results = await Promise.all(toProcess.map(processImageFile));
@@ -941,15 +941,19 @@ export default function ChatPage() {
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      if (isDocumentFile(file)) {
-        uploadDocumentFile(file);
-      } else if (file.type.startsWith("image/")) {
-        addImages(Array.from(files));
-      } else {
-        alert("Format file tidak didukung. Gunakan gambar, PDF, Word, Excel, TXT, MD, atau CSV.");
-      }
+    if (!files || files.length === 0) return;
+    const fileArr = Array.from(files);
+    const imageFiles = fileArr.filter((f) => f.type.startsWith("image/"));
+    const docFiles = fileArr.filter((f) => isDocumentFile(f));
+    const unsupported = fileArr.filter((f) => !f.type.startsWith("image/") && !isDocumentFile(f));
+    if (unsupported.length > 0) {
+      alert(`${unsupported.length} file tidak didukung. Gunakan gambar, PDF, Word, Excel, TXT, MD, atau CSV.`);
+    }
+    if (imageFiles.length > 0) {
+      addImages(imageFiles);
+    }
+    if (docFiles.length > 0) {
+      uploadDocumentFile(docFiles[0]);
     }
     e.target.value = "";
   }, [addImages, uploadDocumentFile]);
@@ -1643,6 +1647,9 @@ export default function ChatPage() {
         )}
         {(attachedImages.length > 0 || attachedFile || fileUploading) && (
           <div className="max-w-2xl mx-auto mb-2 flex flex-wrap gap-2 items-center" data-testid="container-attachment-preview">
+            {attachedImages.length > 1 && (
+              <span className="text-[10px] text-muted-foreground w-full" data-testid="text-image-count">{attachedImages.length}/10 gambar</span>
+            )}
             {attachedImages.map((img, idx) => (
               <div key={idx} className="relative group" data-testid={`preview-image-${idx}`}>
                 <img src={img} alt={`Preview ${idx + 1}`} className="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border" />
@@ -1683,6 +1690,7 @@ export default function ChatPage() {
           ref={fileInputRef}
           type="file"
           accept="image/*,.pdf,.docx,.xlsx,.xls,.txt,.md,.csv"
+          multiple
           className="hidden"
           onChange={handleFileSelect}
           data-testid="input-file-upload"
@@ -1717,7 +1725,7 @@ export default function ChatPage() {
           <div className="max-w-2xl mx-auto flex items-end gap-2">
             <Button
               onClick={() => fileInputRef.current?.click()}
-              disabled={isStreaming || fileUploading || (attachedImages.length >= 5 && !!attachedFile)}
+              disabled={isStreaming || fileUploading || (attachedImages.length >= 10 && !!attachedFile)}
               size="icon"
               variant="outline"
               data-testid="button-upload-file"
@@ -1731,7 +1739,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={isListening ? "Ngomong aja..." : attachedFile ? `Tulis instruksi untuk ${attachedFile.name}...` : attachedImages.length > 0 ? "Ceritain soal gambarnya..." : "Mau ngobrolin apa nih..."}
+              placeholder={isListening ? "Ngomong aja..." : attachedFile ? `Tulis instruksi untuk ${attachedFile.name}...` : attachedImages.length > 0 ? `Ceritain soal ${attachedImages.length} gambar...` : "Mau ngobrolin apa nih..."}
               rows={1}
               style={{ fontSize: "16px" }}
               className="flex-1 resize-none min-h-[42px] max-h-[120px]"
