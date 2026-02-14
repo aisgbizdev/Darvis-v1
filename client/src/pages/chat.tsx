@@ -420,91 +420,107 @@ export default function ChatPage() {
     setTtsPlaying(false);
   }, []);
 
+  const spokenTextRef = useRef("");
+  const isListeningRef = useRef(false);
+  const sentInSessionRef = useRef(false);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       setVoiceSupported(true);
       const recognition = new SpeechRecognition();
       recognition.lang = "id-ID";
-      recognition.continuous = true;
+      recognition.continuous = false;
       recognition.interimResults = true;
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let finalTranscript = "";
         let interimTranscript = "";
+        let finalTranscript = "";
         for (let i = 0; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + " ";
+            finalTranscript += transcript;
           } else {
             interimTranscript += transcript;
           }
         }
-        const currentText = (finalTranscript + interimTranscript).trim();
-        setInput(currentText);
-        lastHeardTextRef.current = currentText;
 
-        if (conversationModeRef.current && currentText) {
-          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-          vadActiveRef.current = true;
-          silenceTimerRef.current = setTimeout(() => {
-            if (vadActiveRef.current && currentText) {
-              vadActiveRef.current = false;
-              recognition.stop();
-              setIsListening(false);
-              if (vadSendRef.current) {
-                vadSendRef.current(currentText);
-              }
+        if (conversationModeRef.current) {
+          const display = finalTranscript || interimTranscript;
+          setInput(display.trim());
+          if (finalTranscript) {
+            const textToSend = finalTranscript.trim();
+            if (textToSend && vadSendRef.current && !sentInSessionRef.current) {
+              sentInSessionRef.current = true;
+              lastHeardTextRef.current = "";
+              vadSendRef.current(textToSend);
+              spokenTextRef.current = "";
             }
-          }, 2500);
+          } else {
+            lastHeardTextRef.current = display.trim();
+          }
+        } else {
+          if (finalTranscript) {
+            spokenTextRef.current = (spokenTextRef.current + " " + finalTranscript).trim();
+            setInput(spokenTextRef.current);
+            lastHeardTextRef.current = "";
+          } else {
+            const display = (spokenTextRef.current + " " + interimTranscript).trim();
+            setInput(display);
+          }
         }
       };
 
       recognition.onend = () => {
-        setIsListening(false);
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = null;
-        }
-
-        if (conversationModeRef.current && vadActiveRef.current) {
-          vadActiveRef.current = false;
+        sentInSessionRef.current = false;
+        if (conversationModeRef.current) {
           const heardText = lastHeardTextRef.current.trim();
           lastHeardTextRef.current = "";
           if (heardText && vadSendRef.current) {
             vadSendRef.current(heardText);
-          } else if (recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-              setIsListening(true);
-            } catch {}
-          }
-        } else if (conversationModeRef.current && !vadActiveRef.current) {
-          if (recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-              setIsListening(true);
-            } catch {}
-          }
-        } else {
-          vadActiveRef.current = false;
-        }
-      };
-
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        if (event.error !== "aborted") {
-          setIsListening(false);
-          if (conversationModeRef.current && event.error === "no-speech") {
+            spokenTextRef.current = "";
+            setIsListening(false);
+          } else if (isListeningRef.current) {
             setTimeout(() => {
               if (conversationModeRef.current && recognitionRef.current) {
                 try {
                   recognitionRef.current.start();
-                  setIsListening(true);
                 } catch {}
+              } else {
+                setIsListening(false);
               }
-            }, 300);
+            }, 100);
           }
+        } else if (isListeningRef.current) {
+          setTimeout(() => {
+            if (isListeningRef.current && recognitionRef.current && !conversationModeRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch {
+                setIsListening(false);
+              }
+            }
+          }, 100);
         }
+      };
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (event.error === "aborted") return;
+        if (event.error === "no-speech") {
+          if ((conversationModeRef.current || isListeningRef.current) && recognitionRef.current) {
+            setTimeout(() => {
+              if (recognitionRef.current && (conversationModeRef.current || isListeningRef.current)) {
+                try { recognitionRef.current.start(); } catch {}
+              }
+            }, 200);
+          }
+          return;
+        }
+        setIsListening(false);
       };
 
       recognitionRef.current = recognition;
@@ -529,13 +545,11 @@ export default function ChatPage() {
     if (isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-      vadActiveRef.current = false;
+      spokenTextRef.current = "";
     } else {
       setInput("");
+      spokenTextRef.current = "";
+      lastHeardTextRef.current = "";
       recognitionRef.current.start();
       setIsListening(true);
     }
@@ -549,15 +563,15 @@ export default function ChatPage() {
         setIsListening(false);
       }
       stopTts();
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
+      spokenTextRef.current = "";
+      lastHeardTextRef.current = "";
     } else {
       unlockAudio();
       setConversationMode(true);
+      spokenTextRef.current = "";
+      lastHeardTextRef.current = "";
+      setInput("");
       if (recognitionRef.current && !isListening) {
-        setInput("");
         try {
           recognitionRef.current.start();
           setIsListening(true);

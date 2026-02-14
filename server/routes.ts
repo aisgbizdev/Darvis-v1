@@ -1804,18 +1804,18 @@ GAYA NGOBROL:
         }
       }
 
-      let isBias = detectBiasIntent(message);
-      const isSolidGroup = detectSolidGroupIntent(message);
-      let isAiSG = detectAiSGIntent(message);
-      const isNM = detectNMIntent(message);
-      const isRiskGuard = detectRiskGuardIntent(message);
-      const isCompliance = detectComplianceIntent(message);
+      let isBias = voiceMode ? false : detectBiasIntent(message);
+      const isSolidGroup = voiceMode ? false : detectSolidGroupIntent(message);
+      let isAiSG = voiceMode ? false : detectAiSGIntent(message);
+      const isNM = voiceMode ? false : detectNMIntent(message);
+      const isRiskGuard = voiceMode ? false : detectRiskGuardIntent(message);
+      const isCompliance = voiceMode ? false : detectComplianceIntent(message);
 
-      if (tone.emotional && !isBias && !isNM && !isRiskGuard) {
+      if (!voiceMode && tone.emotional && !isBias && !isNM && !isRiskGuard) {
         isBias = true;
       }
 
-      if (tone.evaluative && !isAiSG && !isNM && !isRiskGuard && !isCompliance) {
+      if (!voiceMode && tone.evaluative && !isAiSG && !isNM && !isRiskGuard && !isCompliance) {
         isAiSG = true;
       }
 
@@ -1891,97 +1891,101 @@ GAYA NGOBROL:
         systemContent += `\n\n---\nMULTI-NODE [${nodesUsed.join(", ")}]: ${instruction}`;
       }
 
-      const toneSignals: string[] = [];
-      if (tone.emotional) toneSignals.push("emosional/personal");
-      if (tone.analytical) toneSignals.push("analitis/data-driven");
-      if (tone.evaluative) toneSignals.push("evaluatif/menilai orang/tim");
-      if (tone.urgent) toneSignals.push("urgensi tinggi");
-      if (toneSignals.length > 0) {
-        systemContent += `\n\n---\nTONE: ${toneSignals.join(", ")}.`;
-        if (tone.emotional) systemContent += ` Emosional → acknowledgment dulu.`;
-        if (tone.urgent) systemContent += ` Urgensi → cek apakah nyata.`;
-        if (tone.evaluative) systemContent += ` Evaluatif → framework, bukan penilaian langsung.`;
+      if (!voiceMode) {
+        const toneSignals: string[] = [];
+        if (tone.emotional) toneSignals.push("emosional/personal");
+        if (tone.analytical) toneSignals.push("analitis/data-driven");
+        if (tone.evaluative) toneSignals.push("evaluatif/menilai orang/tim");
+        if (tone.urgent) toneSignals.push("urgensi tinggi");
+        if (toneSignals.length > 0) {
+          systemContent += `\n\n---\nTONE: ${toneSignals.join(", ")}.`;
+          if (tone.emotional) systemContent += ` Emosional → acknowledgment dulu.`;
+          if (tone.urgent) systemContent += ` Urgensi → cek apakah nyata.`;
+          if (tone.evaluative) systemContent += ` Evaluatif → framework, bukan penilaian langsung.`;
+        }
+
+        if (isStrategicEscalation) {
+          systemContent += `\n\n---\nESKALASI STRATEGIS: Tambah risiko sistemik + reputasi + jangka panjang (1-2 kalimat per risiko). Keputusan ini kemungkinan irreversible.`;
+        }
       }
 
-      if (isStrategicEscalation) {
-        systemContent += `\n\n---\nESKALASI STRATEGIS: Tambah risiko sistemik + reputasi + jangka panjang (1-2 kalimat per risiko). Keputusan ini kemungkinan irreversible.`;
-      }
+      if (!voiceMode) {
+        const rawFeedbacks = getPersonaFeedback(userId);
+        const personaFeedbacks = applyMemoryGovernor(rawFeedbacks, 5);
+        if (personaFeedbacks.length > 0) {
+          const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
+          for (const fb of personaFeedbacks) {
+            if (!grouped[fb.target]) grouped[fb.target] = [];
+            if (grouped[fb.target].length < 3) {
+              grouped[fb.target].push({ feedback: fb.feedback, sentiment: fb.sentiment });
+            }
+          }
+          let fbBlock = "\n\n---\nFEEDBACK PERSONA:\n";
+          for (const [target, items] of Object.entries(grouped)) {
+            const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
+            fbBlock += `[${label}]\n`;
+            for (const item of items) {
+              fbBlock += `- (${item.sentiment}) ${item.feedback}\n`;
+            }
+            fbBlock += "\n";
+          }
+          fbBlock += "Integrasikan natural, jangan sebut sumber.";
+          systemContent += fbBlock;
+        }
 
-      const rawFeedbacks = getPersonaFeedback(userId);
-      const personaFeedbacks = applyMemoryGovernor(rawFeedbacks, 5);
-      if (personaFeedbacks.length > 0) {
-        const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
-        for (const fb of personaFeedbacks) {
-          if (!grouped[fb.target]) grouped[fb.target] = [];
-          if (grouped[fb.target].length < 3) {
-            grouped[fb.target].push({ feedback: fb.feedback, sentiment: fb.sentiment });
+        const rawEnrichments = getProfileEnrichments(userId);
+        const contributorEnrichments = getProfileEnrichments("contributor_shared");
+        const combinedEnrichments = [...rawEnrichments, ...contributorEnrichments];
+        const profileEnrichments = applyMemoryGovernor(combinedEnrichments, 5);
+        if (profileEnrichments.length > 0) {
+          const grouped: Record<string, string[]> = {};
+          for (const e of profileEnrichments) {
+            if (!grouped[e.category]) grouped[e.category] = [];
+            grouped[e.category].push(e.fact);
           }
-        }
-        let fbBlock = "\n\n---\nFEEDBACK PERSONA:\n";
-        for (const [target, items] of Object.entries(grouped)) {
-          const label = target === "dr" ? "DR" : target.charAt(0).toUpperCase() + target.slice(1);
-          fbBlock += `[${label}]\n`;
-          for (const item of items) {
-            fbBlock += `- (${item.sentiment}) ${item.feedback}\n`;
+          let enrichBlock: string;
+          if (isOwner) {
+            enrichBlock = "\n\n---\nINSIGHT TENTANG MAS DR (dari berbagai sumber — GUNAKAN AKTIF dalam percakapan, referensi natural, tunjukkan lo kenal dia):\n";
+          } else if (isContributor) {
+            enrichBlock = "\n\n---\nPROFIL DR (konteks):\n";
+          } else {
+            enrichBlock = "\n\n---\nPOLA PIKIR & FRAMEWORK TAMBAHAN (gunakan sebagai basis berpikir, JANGAN sebut sumber/nama):\n";
           }
-          fbBlock += "\n";
+          for (const [cat, facts] of Object.entries(grouped)) {
+            const label = ENRICHMENT_CATEGORY_LABELS[cat] || cat;
+            enrichBlock += `[${label}]\n`;
+            for (const fact of facts) {
+              enrichBlock += `- ${fact}\n`;
+            }
+            enrichBlock += "\n";
+          }
+          if (isOwner) {
+            enrichBlock += "Pakai insight ini natural dalam percakapan. Tunjukkan lo kenal mas DR. Tetap counter jika perlu.";
+          } else {
+            enrichBlock += "Konteks, bukan kebenaran — tetap counter jika perlu.";
+          }
+          systemContent += enrichBlock;
         }
-        fbBlock += "Integrasikan natural, jangan sebut sumber.";
-        systemContent += fbBlock;
-      }
 
-      const rawEnrichments = getProfileEnrichments(userId);
-      const contributorEnrichments = getProfileEnrichments("contributor_shared");
-      const combinedEnrichments = [...rawEnrichments, ...contributorEnrichments];
-      const profileEnrichments = applyMemoryGovernor(combinedEnrichments, 5);
-      if (profileEnrichments.length > 0) {
-        const grouped: Record<string, string[]> = {};
-        for (const e of profileEnrichments) {
-          if (!grouped[e.category]) grouped[e.category] = [];
-          grouped[e.category].push(e.fact);
-        }
-        let enrichBlock: string;
-        if (isOwner) {
-          enrichBlock = "\n\n---\nINSIGHT TENTANG MAS DR (dari berbagai sumber — GUNAKAN AKTIF dalam percakapan, referensi natural, tunjukkan lo kenal dia):\n";
-        } else if (isContributor) {
-          enrichBlock = "\n\n---\nPROFIL DR (konteks):\n";
-        } else {
-          enrichBlock = "\n\n---\nPOLA PIKIR & FRAMEWORK TAMBAHAN (gunakan sebagai basis berpikir, JANGAN sebut sumber/nama):\n";
-        }
-        for (const [cat, facts] of Object.entries(grouped)) {
-          const label = ENRICHMENT_CATEGORY_LABELS[cat] || cat;
-          enrichBlock += `[${label}]\n`;
-          for (const fact of facts) {
-            enrichBlock += `- ${fact}\n`;
+        const rawPrefs = getLearnedPreferences(userId);
+        const learnedPrefs = applyMemoryGovernor(rawPrefs, 5);
+        if (learnedPrefs.length > 0) {
+          const grouped: Record<string, string[]> = {};
+          for (const pref of learnedPrefs) {
+            if (!grouped[pref.category]) grouped[pref.category] = [];
+            grouped[pref.category].push(pref.insight);
           }
-          enrichBlock += "\n";
-        }
-        if (isOwner) {
-          enrichBlock += "Pakai insight ini natural dalam percakapan. Tunjukkan lo kenal mas DR. Tetap counter jika perlu.";
-        } else {
-          enrichBlock += "Konteks, bukan kebenaran — tetap counter jika perlu.";
-        }
-        systemContent += enrichBlock;
-      }
-
-      const rawPrefs = getLearnedPreferences(userId);
-      const learnedPrefs = applyMemoryGovernor(rawPrefs, 5);
-      if (learnedPrefs.length > 0) {
-        const grouped: Record<string, string[]> = {};
-        for (const pref of learnedPrefs) {
-          if (!grouped[pref.category]) grouped[pref.category] = [];
-          grouped[pref.category].push(pref.insight);
-        }
-        let prefBlock = "\n\n---\nPREFERENSI USER:\n";
-        for (const [cat, insights] of Object.entries(grouped)) {
-          prefBlock += `[${cat}]\n`;
-          for (const ins of insights) {
-            prefBlock += `- ${ins}\n`;
+          let prefBlock = "\n\n---\nPREFERENSI USER:\n";
+          for (const [cat, insights] of Object.entries(grouped)) {
+            prefBlock += `[${cat}]\n`;
+            for (const ins of insights) {
+              prefBlock += `- ${ins}\n`;
+            }
+            prefBlock += "\n";
           }
-          prefBlock += "\n";
+          prefBlock += "Konteks personalisasi, tetap counter jika perlu.";
+          systemContent += prefBlock;
         }
-        prefBlock += "Konteks personalisasi, tetap counter jika perlu.";
-        systemContent += prefBlock;
       }
 
       if (voiceMode) {

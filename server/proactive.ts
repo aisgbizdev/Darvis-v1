@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import db from "./db";
 import {
   getTeamMembers,
   getMeetings,
@@ -58,8 +59,15 @@ export function checkMeetingReminders() {
       const meetingTime = new Date(meeting.date_time);
       const diffMinutes = (meetingTime.getTime() - now.getTime()) / (1000 * 60);
 
+      if (diffMinutes < -60) {
+        try {
+          db.prepare(`UPDATE meetings SET status = 'completed' WHERE id = ? AND status = 'scheduled'`).run(meeting.id);
+        } catch {}
+        continue;
+      }
+
       if (diffMinutes > 0 && diffMinutes <= 35) {
-        const reminderKey = `meeting_reminder_${meeting.id}_${todayKey()}`;
+        const reminderKey = `meeting_reminder_${meeting.id}_${meeting.date_time}`;
         if (getSetting(reminderKey) === "1") continue;
 
         const minutesLeft = Math.round(diffMinutes);
