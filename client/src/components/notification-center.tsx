@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Bell, CheckCheck, X, Clock, AlertTriangle, Lightbulb, Calendar, Users, FolderKanban, Sparkles } from "lucide-react";
+import { Bell, Trash2, X, Clock, AlertTriangle, Lightbulb, Calendar, Users, FolderKanban, Sparkles } from "lucide-react";
 
 interface Notification {
   id: number;
@@ -177,9 +177,9 @@ export function NotificationCenter() {
     },
   });
 
-  const markAllReadMutation = useMutation({
+  const deleteAllMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/notifications/read-all");
+      await apiRequest("DELETE", "/api/notifications");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
@@ -239,16 +239,15 @@ export function NotificationCenter() {
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b">
             <h3 className="text-xs font-semibold" data-testid="text-notifications-title">Notifikasi</h3>
             <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
+              {notifications.length > 0 && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => markAllReadMutation.mutate()}
-                  className="h-6 w-6"
-                  title="Tandai semua dibaca"
-                  data-testid="button-mark-all-read"
+                  onClick={() => deleteAllMutation.mutate()}
+                  title="Hapus semua notifikasi"
+                  data-testid="button-delete-all-notifications"
                 >
-                  <CheckCheck className="w-3 h-3" />
+                  <Trash2 className="w-3 h-3" />
                 </Button>
               )}
               <Button

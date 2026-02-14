@@ -881,6 +881,14 @@ export function markAllNotificationsRead() {
   db.prepare(`UPDATE notifications SET read = 1 WHERE read = 0`).run();
 }
 
+export function deleteAllNotifications() {
+  db.prepare(`DELETE FROM notifications`).run();
+}
+
+export function cleanupOldNotifications(hoursOld = 24) {
+  db.prepare(`DELETE FROM notifications WHERE read = 1 AND created_at < datetime('now', '-' || ? || ' hours')`).run(hoursOld);
+}
+
 export function deleteNotification(id: number) {
   db.prepare(`DELETE FROM notifications WHERE id = ?`).run(id);
 }

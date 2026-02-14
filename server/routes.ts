@@ -57,6 +57,8 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   deleteNotification,
+  deleteAllNotifications,
+  cleanupOldNotifications,
   savePushSubscription,
 } from "./db";
 import { getVapidPublicKey, sendPushToAll } from "./push";
@@ -1449,6 +1451,16 @@ export async function registerRoutes(
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       deleteNotification(Number(req.params.id));
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/notifications", (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      deleteAllNotifications();
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });

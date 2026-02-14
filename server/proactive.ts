@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import db from "./db";
+import { cleanupOldNotifications } from "./db";
 import {
   getTeamMembers,
   getMeetings,
@@ -282,7 +283,12 @@ export function startProactiveSystem() {
     generateProactiveInsight();
   }, 60 * 60 * 1000);
 
+  setInterval(() => {
+    cleanupOldNotifications(24);
+  }, 60 * 60 * 1000);
+
   setTimeout(() => {
+    cleanupOldNotifications(24);
     checkMeetingReminders();
     checkOverdueItems();
     checkProjectDeadlines();
