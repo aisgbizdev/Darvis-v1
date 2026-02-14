@@ -949,4 +949,63 @@ export function removePushSubscription(endpoint: string) {
   db.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).run(endpoint);
 }
 
+export function seedDRProfileForUser(userId: string) {
+  const existingCount = (db.prepare(`SELECT COUNT(*) as cnt FROM profile_enrichments WHERE user_id = ?`).get(userId) as { cnt: number }).cnt;
+  if (existingCount > 0) {
+    return;
+  }
+
+  const seedItems: { category: string; fact: string; confidence: number }[] = [];
+
+  seedItems.push({ category: "identitas_profesional", fact: "CBD (Chief Business Developer) Solid Group, langsung di bawah owner", confidence: 1.0 });
+  seedItems.push({ category: "identitas_profesional", fact: "Mengelola 5 PT: RFB, EWF, KPF, BPF, SGB", confidence: 1.0 });
+  seedItems.push({ category: "identitas_profesional", fact: "Memimpin divisi BD sebagai engine strategis SG", confidence: 1.0 });
+  seedItems.push({ category: "identitas_profesional", fact: "Usia: 51 tahun (lahir 11 Agustus)", confidence: 1.0 });
+
+  seedItems.push({ category: "gaya_berpikir", fact: "Polymath & modular thinker — paham lintas bidang, ambil kelebihan parsial dari berbagai sumber, racik jadi framework sendiri", confidence: 1.0 });
+  seedItems.push({ category: "gaya_berpikir", fact: "Multimode: makro-strategis, teknis-detail, kreatif, humanistik — bisa pindah mode dalam satu percakapan", confidence: 1.0 });
+  seedItems.push({ category: "gaya_berpikir", fact: "Berpikir sistemik: selalu lihat gambaran besar dan koneksi antar bagian", confidence: 1.0 });
+  seedItems.push({ category: "gaya_berpikir", fact: "Visioner tapi detail-oriented, tegas tapi peduli tim", confidence: 1.0 });
+  seedItems.push({ category: "gaya_berpikir", fact: "High expectation, fast-paced, naluri psikologis kuat", confidence: 1.0 });
+  seedItems.push({ category: "gaya_berpikir", fact: "Suka di-challenge habis-habisan, bukan di-iya-in", confidence: 1.0 });
+
+  seedItems.push({ category: "gaya_komunikasi", fact: "Santai, to the point, kadang gaul, tegas kalau konteks berat", confidence: 1.0 });
+  seedItems.push({ category: "gaya_komunikasi", fact: "Fleksibel: formal saat kerja, santai saat curhat", confidence: 1.0 });
+  seedItems.push({ category: "gaya_komunikasi", fact: "Suka sparring intelektual — butuh partner yang menantang dan berani beda pendapat", confidence: 1.0 });
+  seedItems.push({ category: "gaya_komunikasi", fact: "Sering pakai analogi dari film, buku, dan tokoh untuk jelaskan konsep", confidence: 1.0 });
+
+  seedItems.push({ category: "kekuatan", fact: "Sistemik, eksekutor cepat, struktural-rapi, berani hadapi fakta, open to tech, tahan tekanan, empatik realistis, polymath, adaptif, baca orang cepat", confidence: 1.0 });
+
+  seedItems.push({ category: "area_perhatian", fact: "Terlalu banyak proyek jalan bersamaan — energi kepecah, mental load tinggi", confidence: 1.0 });
+  seedItems.push({ category: "area_perhatian", fact: "Perfeksionis sistem bisa tunda implementasi", confidence: 1.0 });
+  seedItems.push({ category: "area_perhatian", fact: "Cenderung micromanage di beberapa titik — perlu latih trust & delegation", confidence: 1.0 });
+  seedItems.push({ category: "area_perhatian", fact: "Frustrasi kalau orang lambat atau gak inisiatif", confidence: 1.0 });
+
+  seedItems.push({ category: "filosofi_hidup", fact: "Legacy jangka panjang > hasil instan", confidence: 1.0 });
+  seedItems.push({ category: "filosofi_hidup", fact: "Sistem > individu — bangun yang bisa jalan tanpa ketergantungan satu orang", confidence: 1.0 });
+  seedItems.push({ category: "filosofi_hidup", fact: "Speed over protocol — lebih baik minta maaf daripada izin", confidence: 1.0 });
+  seedItems.push({ category: "filosofi_hidup", fact: "Meritokrasi ide, bukan senioritas", confidence: 1.0 });
+  seedItems.push({ category: "filosofi_hidup", fact: "Data-driven tapi tetap dengar intuisi", confidence: 1.0 });
+
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul power dynamics: Machiavelli, Robert Greene, John Gotti, Frank Underwood", confidence: 1.0 });
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul wisdom & kesabaran: Vito Corleone, Sun Tzu, Warren Buffett", confidence: 1.0 });
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul leadership: John Maxwell, Umar bin Khattab", confidence: 1.0 });
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul visionary: Steve Jobs, Elon Musk, Steve Wozniak", confidence: 1.0 });
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul self-mastery: Miyamoto Musashi, Marcus Aurelius", confidence: 1.0 });
+  seedItems.push({ category: "tokoh_inspirasi", fact: "Modul spiritual: Al-Ghazali, Malcolm X, Nabi Muhammad SAW", confidence: 1.0 });
+
+  seedItems.push({ category: "panggilan", fact: "DR / Raha / Bapak / Bapa / Abah / YKW / mas DR. TIDAK SUKA dipanggil 'Boss'", confidence: 1.0 });
+
+  seedItems.push({ category: "keluarga", fact: "Lisa (istri), Vito (anak sulung), Veeta (anak bungsu)", confidence: 1.0 });
+
+  const transaction = db.transaction(() => {
+    for (const item of seedItems) {
+      db.prepare(`INSERT INTO profile_enrichments (user_id, category, fact, confidence, source_quote) VALUES (?, ?, ?, ?, ?)`)
+        .run(userId, item.category, item.fact, item.confidence, "Seeded from DARVIS_PROFILE_DR.md");
+    }
+  });
+  transaction();
+  console.log(`Profile DR seeded for ${userId}: ${seedItems.length} facts`);
+}
+
 export default db;

@@ -23,7 +23,7 @@ import {
   clearPersonaFeedback,
   getProfileEnrichments,
   bulkSaveProfileEnrichments,
-  clearProfileEnrichments,
+  seedDRProfileForUser,
   saveConversationTag,
   getConversationTags,
   clearConversationTags,
@@ -1618,7 +1618,6 @@ export async function registerRoutes(
       clearHistory(userId);
       clearPreferences(userId);
       clearPersonaFeedback(userId);
-      clearProfileEnrichments(userId);
       clearConversationTags(userId);
       return res.json({ success: true });
     } catch (err: any) {
@@ -1652,7 +1651,12 @@ export async function registerRoutes(
   app.get("/api/profile-enrichments", (req, res) => {
     try {
       const userId = getUserId(req);
-      const enrichments = getProfileEnrichments(userId);
+      const isOwner = req.session.isOwner === true;
+      let enrichments = getProfileEnrichments(userId);
+      if (isOwner && enrichments.length === 0) {
+        seedDRProfileForUser(userId);
+        enrichments = getProfileEnrichments(userId);
+      }
       return res.json({ enrichments });
     } catch (err: any) {
       console.error("Profile enrichments API error:", err?.message || err);

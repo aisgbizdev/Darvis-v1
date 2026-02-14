@@ -153,6 +153,15 @@ function ContextModeBadge({ mode }: { mode: string }) {
 }
 
 const ENRICHMENT_LABELS: Record<string, string> = {
+  identitas_profesional: "Identitas Profesional",
+  gaya_berpikir: "Gaya Berpikir",
+  gaya_komunikasi: "Gaya Komunikasi",
+  kekuatan: "Kekuatan",
+  area_perhatian: "Area Perhatian",
+  filosofi_hidup: "Filosofi Hidup",
+  tokoh_inspirasi: "Tokoh & Inspirasi",
+  panggilan: "Panggilan",
+  keluarga: "Keluarga",
   persepsi_orang: "Persepsi Orang Lain",
   cerita_bersama: "Cerita & Pengalaman Bersama",
   tokoh_idola: "Tokoh Idola & Inspirasi",
