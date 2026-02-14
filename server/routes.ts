@@ -1067,6 +1067,17 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get("/api/download/darvis-gpts", (_req, res) => {
+    const zipPath = path.join(process.cwd(), "public", "darvis-gpts.zip");
+    if (fs.existsSync(zipPath)) {
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", "attachment; filename=darvis-gpts.zip");
+      fs.createReadStream(zipPath).pipe(res);
+    } else {
+      res.status(404).json({ error: "File not found" });
+    }
+  });
+
   app.post("/api/login", (req, res) => {
     try {
       const { password } = req.body;
