@@ -230,17 +230,30 @@ export default function ChatPage() {
   const lastHeardTextRef = useRef("");
 
   const focusInput = useCallback(() => {
-    try {
-      setTimeout(() => {
+    if (conversationModeRef.current) return;
+    const doFocus = () => {
+      try {
         if (inputRef.current && !conversationModeRef.current) {
-          inputRef.current.focus();
+          inputRef.current.focus({ preventScroll: true });
         }
-      }, 100);
-    } catch {}
+      } catch {}
+    };
+    doFocus();
+    setTimeout(doFocus, 50);
+    setTimeout(doFocus, 200);
+    setTimeout(doFocus, 500);
   }, []);
 
   useEffect(() => {
     focusInput();
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("button") && !target.closest("input") && !target.closest("a") && !target.closest("[role='dialog']")) {
+        focusInput();
+      }
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, [focusInput]);
 
   useEffect(() => {
@@ -814,7 +827,9 @@ export default function ChatPage() {
     } finally {
       setIsStreaming(false);
       if (!conversationModeRef.current) {
-        inputRef.current?.focus();
+        setTimeout(() => inputRef.current?.focus(), 50);
+        setTimeout(() => inputRef.current?.focus(), 200);
+        setTimeout(() => inputRef.current?.focus(), 500);
       }
       setTimeout(scrollToBottom, 50);
       if (pendingTtsRef.current) {
@@ -1649,6 +1664,7 @@ export default function ChatPage() {
             </Button>
             <Textarea
               ref={inputRef}
+              autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
