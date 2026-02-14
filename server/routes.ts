@@ -1058,6 +1058,9 @@ function mergePersonasToUnifiedVoice(text: string): string {
 }
 
 function getUserId(req: any): string {
+  if (req.session.isOwner === true) {
+    return "owner_master";
+  }
   if (!req.session.userId) {
     req.session.userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
