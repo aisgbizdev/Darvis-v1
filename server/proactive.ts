@@ -326,13 +326,26 @@ function aggressiveCleanup() {
   try {
     cleanupOldNotifications(24);
 
-    db.prepare(`
+    const r1 = db.prepare(`
       DELETE FROM notifications WHERE type = 'meeting_reminder' AND created_at < datetime('now', '-1 hours')
     `).run();
 
-    db.prepare(`
+    const r2 = db.prepare(`
       DELETE FROM notifications WHERE read = 1 AND type NOT IN ('darvis_insight') AND created_at < datetime('now', '-2 hours')
     `).run();
+
+    const r3 = db.prepare(`
+      DELETE FROM notifications WHERE type IN ('overdue_alert', 'meeting_reminder') AND created_at < datetime('now', '-3 hours')
+    `).run();
+
+    const r4 = db.prepare(`
+      DELETE FROM notifications WHERE created_at < datetime('now', '-12 hours')
+    `).run();
+
+    const cleaned = (r1.changes || 0) + (r2.changes || 0) + (r3.changes || 0) + (r4.changes || 0);
+    if (cleaned > 0) {
+      console.log(`Cleanup: removed ${cleaned} old notifications`);
+    }
   } catch (err: any) {
     console.error("Aggressive cleanup failed:", err?.message || err);
   }

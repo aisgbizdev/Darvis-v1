@@ -2533,10 +2533,17 @@ GAYA NGOBROL:
         }
 
         const msgCount = activeRoomId ? getMessageCountForRoom(activeRoomId) : getMessageCount(userId);
+        console.log(`Post-chat: isOwner=${isOwner}, isContributor=${isContributor}, msgLen=${message.length}, replyLen=${reply.length}`);
         if (isOwner) {
-          extractSecretaryData(message, reply).catch((err) => {
+          console.log("Post-chat: calling extractSecretaryData NOW");
+          extractSecretaryData(message, reply).then(() => {
+            console.log("Post-chat: extractSecretaryData completed successfully");
+          }).catch((err) => {
             console.error("Secretary extraction error:", err?.message || err);
+            if (err?.stack) console.error("Secretary extraction call stack:", err.stack.split("\n").slice(0, 5).join("\n"));
           });
+        } else {
+          console.log("Post-chat: skipping extraction (not owner)");
         }
 
         if (msgCount > 0 && msgCount % 20 === 0) {
@@ -2721,7 +2728,8 @@ async function detectRoomAction(userMessage: string, userId: string): Promise<Ro
   if (roomSummaries.length === 0) {
     const isSubstantive = userMessage.trim().split(/\s+/).length >= 3;
     if (!isSubstantive) return { action: "stay_lobby", reason: "Pesan terlalu singkat" };
-    return { action: "create_new", reason: "Belum ada room, topik baru" };
+    const autoTitle = userMessage.trim().substring(0, 50).replace(/\s+/g, " ");
+    return { action: "create_new", roomTitle: autoTitle || "Obrolan Baru", reason: "Belum ada room, topik baru" };
   }
 
   const roomList = roomSummaries.map(r => {
@@ -2889,6 +2897,7 @@ RULES:
 }
 
 async function extractSecretaryData(userMessage: string, assistantReply: string) {
+  console.log(`extractSecretaryData: ENTERED — userMsg=${userMessage.substring(0, 80)}...`);
   const combinedText = `User: ${userMessage}\n\nDARVIS: ${assistantReply}`;
 
   const wibDateStr = getWIBDateString();
