@@ -68,10 +68,13 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
         - All secretary features owner-only protected.
     - **Conversation Rooms (v2.0, Owner-only)**: Organize chat history by topic while maintaining unified global context across all rooms.
         - Database: `chat_rooms` table with `session_id`, `title`, `created_at`, `updated_at`. Conversations linked via `room_id`.
-        - API: `/api/rooms` (GET list, POST create, PATCH rename, DELETE), room-aware `/api/history?roomId=X`, `/api/chat` with `roomId` in payload, `/api/clear` with `roomId`.
-        - Frontend: `ConversationSidebar` component with room list, create/rename/delete. Toggle via PanelLeft icon in header (owner-only). Desktop: 224px side panel. Mobile: full-screen drawer with backdrop.
+        - API: `/api/rooms` (GET list, POST create, PATCH rename, DELETE, POST merge), room-aware `/api/history?roomId=X`, `/api/chat` with `roomId` in payload, `/api/clear` with `roomId`.
+        - Frontend: `ConversationSidebar` component with room list, create/rename/delete/merge. Toggle via PanelLeft icon in header (owner-only). Desktop: 224px side panel. Mobile: full-screen drawer with backdrop.
+        - **Lobby**: Default free-chat area (no room). Messages in lobby can be auto-routed to rooms.
         - Key design: All learned preferences, profile enrichments, persona feedback, and secretary data remain **global shared** across rooms — DARVIS maintains unified "brain" unlike ChatGPT's isolated conversations.
         - Auto-summary per room via `generateRoomSummary()`.
+        - **Auto-Room Management (v2.0)**: GPT-powered `detectRoomAction()` analyzes lobby messages against existing room summaries. Actions: `stay_lobby` (casual chat), `move_to_existing` (topic matches existing room), `create_new` (substantive new topic). Runs in parallel with chat completion to avoid latency. Frontend auto-switches room with toast notification.
+        - **Room Merge**: Owner can select 2+ rooms in sidebar merge mode, first selected becomes target. `mergeRooms()` atomically moves all messages and deletes source rooms. Server validates room ownership.
     - **Key Files**: `server/proactive.ts` (proactive system), `client/src/components/secretary-dashboard.tsx`, `client/src/components/notification-center.tsx`, `client/src/components/conversation-sidebar.tsx`.
 
 ## External Dependencies
