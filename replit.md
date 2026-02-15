@@ -28,7 +28,7 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
 - **Technical Implementations**:
     - **Frontend**: React, TypeScript, Tailwind CSS, shadcn/ui.
     - **Backend**: Express.js with OpenAI API integration.
-    - **AI Model**: GPT-5 via OpenAI API.
+    - **AI Model**: Smart model routing — GPT-5 for strategic/complex topics, GPT-4o-mini for casual chat and all background extraction tasks (auto-learn, profile enrichment, secretary extraction, summaries, room detection).
     - **State/Database**: Server-side SQLite (better-sqlite3) using `darvis.db` for persistent chat history, auto-summary, learned preferences, profile enrichments, and conversation tags.
     - **Core System Prompt**: `prompts/DARVIS_CORE.md` defines quad-persona rules and context mode rules.
     - **Profile Foundation**: `prompts/DARVIS_PROFILE_DR.md` for DR's foundational knowledge.
@@ -82,5 +82,5 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
     - **Key Files**: `server/proactive.ts` (proactive system), `client/src/components/secretary-dashboard.tsx`, `client/src/components/notification-center.tsx`, `client/src/components/conversation-sidebar.tsx`.
 
 ## External Dependencies
-- **OpenAI API**: Used for AI model inference (GPT-5).
+- **OpenAI API**: Used for AI model inference (GPT-5 for strategic, GPT-4o-mini for casual/extraction).
 - **Web Speech API (Browser)**: Utilized for the Voice Input feature to convert speech to text.

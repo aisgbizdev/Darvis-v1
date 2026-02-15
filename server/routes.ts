@@ -743,9 +743,9 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
   const isAction = detectActionItemIntent(message);
   const isPersona = detectPersonaIntent(message);
 
-  if (isTeam || isOwner) {
-    const members = await getTeamMembers("active");
-    if (members.length > 0) {
+  const members = await getTeamMembers("active");
+  if ((isTeam || isOwner) && members.length > 0) {
+    if (isTeam || isPersona) {
       context += `\n\n---\nNODE_TEAM — Orang-orang yang dikenal DR:\n`;
       const grouped: Record<string, typeof members> = {};
       for (const m of members) {
@@ -762,11 +762,10 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
           if (m.aliases) context += ` (alias: ${m.aliases})`;
           if (m.position) context += ` — ${m.position}`;
           const details: string[] = [];
-          if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
-          if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
-          if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
-          if (m.active_projects) details.push(`Project aktif: ${m.active_projects}`);
           if (showPersonaDetail) {
+            if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
+            if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
+            if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
             if (m.work_style) details.push(`Gaya kerja: ${m.work_style}`);
             if (m.communication_style) details.push(`Gaya komunikasi: ${m.communication_style}`);
             if (m.triggers) details.push(`Trigger/sensitif: ${m.triggers}`);
@@ -777,23 +776,19 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
           context += `\n`;
         }
       }
+
+      if (isPersona) {
+        const membersWithPersona = members.filter(m => m.work_style || m.communication_style || m.triggers || m.commitments || m.personality_notes);
+        const membersWithoutPersona = members.filter(m => !m.work_style && !m.communication_style && !m.triggers && !m.commitments && !m.personality_notes);
+        context += `\nPERSONA PROFILING AKTIF — ${membersWithPersona.length} punya profil, ${membersWithoutPersona.length} belum. Tangkap data persona dari obrolan natural.`;
+      }
+    } else {
       const allNames = members.flatMap(m => {
         const names = [m.name];
         if (m.aliases) names.push(...m.aliases.split(",").map(a => a.trim()).filter(Boolean));
         return names;
       });
-      context += `\nDARVIS SUDAH KENAL ${members.length} orang (${allNames.join(", ")}). RULES KETAT:`;
-      context += `\n1. Kalau DR sebut nama yang ADA di daftar ini (termasuk alias), JANGAN tanya lagi siapa dia. Langsung lanjut natural pakai info yang sudah ada.`;
-      context += `\n2. Kalau DR sebut nama BARU yang BELUM ada di daftar, tanya "Siapa [nama]?" SEKALI SAJA, lalu simpan jawabannya.`;
-      context += `\n3. JANGAN PERNAH tanya ulang soal orang yang sudah pernah dibahas/disimpan sebelumnya — ini SANGAT menjengkelkan user.\n`;
-
-      if (isPersona) {
-        const membersWithPersona = members.filter(m => m.work_style || m.communication_style || m.triggers || m.commitments || m.personality_notes);
-        const membersWithoutPersona = members.filter(m => !m.work_style && !m.communication_style && !m.triggers && !m.commitments && !m.personality_notes);
-        context += `\nPERSONA PROFILING AKTIF — ${membersWithPersona.length} orang sudah punya profil persona, ${membersWithoutPersona.length} belum.`;
-        context += `\nKalau DR ngomongin karakter/sifat/gaya seseorang, TANGKAP dan simpan. Boleh gali lebih dalam secara natural: "Gimana cara dia handle tekanan?" / "Dia tipe yang harus di-push atau self-driven?" — tapi JANGAN interogasi, ngobrol aja natural.`;
-        context += `\nKalau DR tanya rekomendasi delegasi/assignment, GUNAKAN data persona yang ada untuk kasih saran yang tajam dan personal.`;
-      }
+      context += `\n\n---\nNODE_TEAM (compact): DARVIS kenal ${members.length} orang: ${allNames.join(", ")}. Kalau DR sebut nama ini, lanjut natural. Kalau nama baru, tanya "Siapa [nama]?" sekali.`;
     }
   }
 
@@ -914,7 +909,7 @@ Respond ONLY with valid JSON array.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
@@ -980,7 +975,7 @@ Respond ONLY with valid JSON array.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 1024,
     });
@@ -2106,13 +2101,14 @@ GAYA NGOBROL:
         systemContent += CONTEXT_MODE_FRAMINGS[contextMode];
       }
 
-      if (drProfile) {
+      const needsProfile = contextMode !== "general" || isStrategicEscalation || isDecisionFast || isMultiPersonaMode || /\b(filosofi|prinsip|cara\s+pikir|mindset|nilai|legacy|visi|misi|strategi\s+hidup|karakter\s+gw|gw\s+itu|gaya\s+gw)\b/i.test(message);
+      if (drProfile && needsProfile) {
         if (isOwner) {
-          systemContent += `\n\n---\nPROFIL MAS DR (GUNAKAN AKTIF — lo kenal orang ini, referensi natural):\n${drProfile}`;
+          systemContent += `\n\n---\nPROFIL MAS DR (referensi natural):\n${drProfile}`;
         } else if (!isContributor) {
-          systemContent += `\n\n---\nFRAMEWORK SUMBER (basis cara berpikir DARVIS — JANGAN sebut nama/identitas, tapi GUNAKAN pola pikirnya: sistemik, legacy-oriented, counter-angle, risiko jangka panjang, meritokrasi, data-driven):\n${drProfile}`;
+          systemContent += `\n\n---\nFRAMEWORK SUMBER (pola pikir DARVIS — JANGAN sebut nama/identitas):\n${drProfile}`;
         } else {
-          systemContent += `\n\n---\nPROFIL FONDASI DR (konteks untuk memahami cerita kontributor):\n${drProfile}`;
+          systemContent += `\n\n---\nPROFIL DR (konteks):\n${drProfile}`;
         }
       }
 
@@ -2131,7 +2127,10 @@ GAYA NGOBROL:
       const isCompliance = voiceMode ? false : detectComplianceIntent(message);
 
       if (!voiceMode && tone.emotional && !isBias && !isNM && !isRiskGuard) {
-        isBias = true;
+        const explicitBiasKeywords = /\b(bias|keputusan\s+besar|dilema|galau\s+berat|bingung\s+banget|gak\s+tau\s+harus|harus\s+pilih|pilihan\s+sulit|pro\s+kontra|trade.?off|resiko\s+besar)\b/i;
+        if (explicitBiasKeywords.test(message)) {
+          isBias = true;
+        }
       }
 
 
@@ -2191,7 +2190,8 @@ GAYA NGOBROL:
         }
       }
 
-      if (nodesUsed.length > 0) {
+      const isResourceIntent = !voiceMode && /\b(buku|book|referensi|bacaan|sumber|resource|rekomendasi\s+baca|literature|riset|research|jurnal|paper|studi|framework.*referensi)\b/i.test(message);
+      if (isResourceIntent) {
         const resourcePrompt = readPromptFile("DARVIS_NODE_RESOURCES.md");
         if (resourcePrompt) {
           systemContent += `\n\n---\nNODE_RESOURCES:\n${resourcePrompt}`;
@@ -2327,9 +2327,13 @@ GAYA NGOBROL:
       apiMessages.push({ role: "system", content: systemContent });
 
       const systemTokenEstimate = Math.ceil(systemContent.length / 3.5);
-      const reasoningEffort = wantsDetail ? "medium" : "low";
-      const maxTokens = wantsDetail ? 2048 : (voiceMode ? 512 : 1024);
-      console.log(`[PROMPT] size: ~${systemTokenEstimate}tok, nodes: [${nodesUsed.join(", ")}], voice: ${voiceMode}, msgWords: ${msgWordCount}, reasoning: ${reasoningEffort}, maxTok: ${maxTokens}`);
+      const isHeavyContext = nodesUsed.length >= 2 || wantsDetail || contextMode !== "general" || isStrategicEscalation;
+      const hasHeavyNode = nodesUsed.some(n => ["NODE_BIAS", "NODE_RISK_GUARD", "NODE_NM", "NODE_COMPLIANCE"].includes(n));
+      const needsGPT5 = wantsDetail || isHeavyContext || hasHeavyNode || isMultiPersonaMode || isDecisionFast || hasImages || (isContributor && !!req.session.contributorTeamMemberId) || contextMode !== "general" || msgWordCount > 50 || /\b(analisis|strategi|keputusan|evaluasi|review|rencana|plan|gimana\s+menurut|gimana\s+cara|apa\s+pendapat|bantu\s+gw)\b/i.test(message);
+      const selectedModel = needsGPT5 ? "gpt-5" : "gpt-4o-mini";
+      const reasoningEffort = needsGPT5 ? (wantsDetail ? "medium" : "low") : undefined;
+      const maxTokens = wantsDetail ? 2048 : (voiceMode ? 512 : (needsGPT5 ? 1024 : 768));
+      console.log(`[PROMPT] model: ${selectedModel}, size: ~${systemTokenEstimate}tok, nodes: [${nodesUsed.join(", ")}], voice: ${voiceMode}, msgWords: ${msgWordCount}, reasoning: ${reasoningEffort || "n/a"}, maxTok: ${maxTokens}`);
 
       const summary = activeRoomId ? await getRoomSummary(activeRoomId) : await getSummary(userId);
       if (summary) {
@@ -2339,7 +2343,7 @@ GAYA NGOBROL:
         });
       }
 
-      const contextBudget = nodesUsed.length >= 3 ? 10 : 20;
+      const contextBudget = isHeavyContext ? 10 : (voiceMode ? 4 : 6);
       const recentMessages = activeRoomId ? await getLastMessagesForRoom(activeRoomId, contextBudget) : await getLastMessages(userId, contextBudget);
       for (const msg of recentMessages) {
         apiMessages.push({
@@ -2393,13 +2397,16 @@ GAYA NGOBROL:
       res.on("close", serverCleanup);
 
       try {
-        const stream = await (openai.chat.completions.create as any)({
-          model: "gpt-5",
+        const chatParams: any = {
+          model: selectedModel,
           messages: apiMessages,
           max_completion_tokens: maxTokens,
-          reasoning_effort: reasoningEffort,
           stream: true,
-        }, { signal: abortController.signal });
+        };
+        if (reasoningEffort) {
+          chatParams.reasoning_effort = reasoningEffort;
+        }
+        const stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
 
         let fullReply = "";
         let lastFinishReason: string | null = null;
@@ -2650,7 +2657,7 @@ Respond ONLY with valid JSON array, no other text.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
@@ -2704,7 +2711,7 @@ async function generateSummary(userId: string) {
     : `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nPercakapan:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) dari percakapan ini. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 2048,
   });
@@ -2759,7 +2766,7 @@ Jawab HANYA dalam format JSON (tanpa markdown):
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 256,
     });
@@ -2800,7 +2807,7 @@ async function generateRoomSummary(roomId: number, userId: string) {
     : `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nPercakapan:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) dari percakapan ini. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 2048,
   });
@@ -2854,7 +2861,7 @@ RULES:
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 1024,
     });
@@ -2987,7 +2994,7 @@ Respond ONLY with valid JSON, no other text.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
