@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import db from "./db";
+import pool from "./db";
 import { cleanupOldNotifications } from "./db";
 import {
   getTeamMembers,
@@ -64,8 +64,8 @@ function getWIBDayName(): string {
 
 export { getWIBDate, getWIBDateString, getWIBTimeString, getWIBHour, getWIBDayName, parseWIBTimestamp };
 
-function createNotification(data: { type: string; title: string; message: string; data?: string | null }): number {
-  const id = dbCreateNotification(data);
+async function createNotification(data: { type: string; title: string; message: string; data?: string | null }): Promise<number> {
+  const id = await dbCreateNotification(data);
   sendPushToAll(data.title, data.message).catch(() => {});
   return id;
 }
@@ -76,24 +76,24 @@ function todayKey(): string {
   return getWIBDateString();
 }
 
-function getInsightCountToday(): number {
-  const count = getSetting(`insight_count_${todayKey()}`);
+async function getInsightCountToday(): Promise<number> {
+  const count = await getSetting(`insight_count_${todayKey()}`);
   return count ? parseInt(count, 10) : 0;
 }
 
-function incrementInsightCount() {
-  const current = getInsightCountToday();
-  setSetting(`insight_count_${todayKey()}`, String(current + 1));
+async function incrementInsightCount() {
+  const current = await getInsightCountToday();
+  await setSetting(`insight_count_${todayKey()}`, String(current + 1));
 }
 
-function hasSentNotifToday(type: string): boolean {
+async function hasSentNotifToday(type: string): Promise<boolean> {
   const key = `notif_${type}_${todayKey()}`;
-  return getSetting(key) === "1";
+  return (await getSetting(key)) === "1";
 }
 
-function markNotifSent(type: string) {
+async function markNotifSent(type: string) {
   const key = `notif_${type}_${todayKey()}`;
-  setSetting(key, "1");
+  await setSetting(key, "1");
 }
 
 function parseWIBTimestamp(dateTimeStr: string): Date {
@@ -107,9 +107,9 @@ function parseWIBTimestamp(dateTimeStr: string): Date {
   return new Date(dateTimeStr);
 }
 
-export function checkMeetingReminders() {
+export async function checkMeetingReminders() {
   try {
-    const upcoming = getUpcomingMeetings();
+    const upcoming = await getUpcomingMeetings();
     const now = Date.now();
 
     for (const meeting of upcoming) {
@@ -120,23 +120,23 @@ export function checkMeetingReminders() {
 
       if (diffMinutes < -60) {
         try {
-          db.prepare(`UPDATE meetings SET status = 'completed' WHERE id = ? AND status = 'scheduled'`).run(meeting.id);
+          await pool.query(`UPDATE meetings SET status = 'completed' WHERE id = $1 AND status = 'scheduled'`, [meeting.id]);
         } catch {}
         continue;
       }
 
       if (diffMinutes > 0 && diffMinutes <= 35) {
         const reminderKey = `meeting_reminder_${meeting.id}_${meeting.date_time}`;
-        if (getSetting(reminderKey) === "1") continue;
+        if ((await getSetting(reminderKey)) === "1") continue;
 
         const minutesLeft = Math.round(diffMinutes);
-        createNotification({
+        await createNotification({
           type: "meeting_reminder",
           title: `Meeting dalam ${minutesLeft} menit`,
           message: `${meeting.title}${meeting.participants ? ` — Peserta: ${meeting.participants}` : ""}${meeting.agenda ? ` — Agenda: ${meeting.agenda}` : ""}`,
           data: JSON.stringify({ meeting_id: meeting.id }),
         });
-        setSetting(reminderKey, "1");
+        await setSetting(reminderKey, "1");
         console.log(`Proactive: meeting reminder sent for "${meeting.title}" (WIB)`);
       }
     }
@@ -145,11 +145,11 @@ export function checkMeetingReminders() {
   }
 }
 
-export function checkOverdueItems() {
+export async function checkOverdueItems() {
   try {
-    if (hasSentNotifToday("overdue_check")) return;
+    if (await hasSentNotifToday("overdue_check")) return;
 
-    const overdue = getOverdueActionItems();
+    const overdue = await getOverdueActionItems();
     if (overdue.length === 0) return;
 
     const items = overdue.slice(0, 5).map(a => {
@@ -159,24 +159,24 @@ export function checkOverdueItems() {
       return text;
     });
 
-    createNotification({
+    await createNotification({
       type: "overdue_alert",
       title: `${overdue.length} action item overdue`,
       message: items.join("\n"),
       data: JSON.stringify({ count: overdue.length }),
     });
-    markNotifSent("overdue_check");
+    await markNotifSent("overdue_check");
     console.log(`Proactive: overdue alert sent (${overdue.length} items)`);
   } catch (err: any) {
     console.error("Overdue check failed:", err?.message || err);
   }
 }
 
-export function checkProjectDeadlines() {
+export async function checkProjectDeadlines() {
   try {
-    if (hasSentNotifToday("project_deadline")) return;
+    if (await hasSentNotifToday("project_deadline")) return;
 
-    const projects = getProjects("active");
+    const projects = await getProjects("active");
     const todayStr = getWIBDateString();
     const todayMs = new Date(todayStr + "T00:00:00Z").getTime();
     const warnings: string[] = [];
@@ -191,12 +191,12 @@ export function checkProjectDeadlines() {
     }
 
     if (warnings.length > 0) {
-      createNotification({
+      await createNotification({
         type: "project_deadline",
         title: `${warnings.length} project mendekati deadline`,
         message: warnings.join("\n"),
       });
-      markNotifSent("project_deadline");
+      await markNotifSent("project_deadline");
       console.log(`Proactive: project deadline warning sent`);
     }
   } catch (err: any) {
@@ -204,18 +204,19 @@ export function checkProjectDeadlines() {
   }
 }
 
-export function generateDailyBriefing() {
+export async function generateDailyBriefing() {
   try {
-    if (hasSentNotifToday("daily_briefing")) return;
+    if (await hasSentNotifToday("daily_briefing")) return;
 
     const hour = getWIBHour();
     if (hour < 6 || hour > 9) return;
 
-    const todayMeetings = getTodayMeetings();
-    const pending = getPendingActionItems();
-    const overdue = getOverdueActionItems();
-    const activeProjects = getProjects("active");
-    const teamCount = getTeamMembers("active").length;
+    const todayMeetings = await getTodayMeetings();
+    const pending = await getPendingActionItems();
+    const overdue = await getOverdueActionItems();
+    const activeProjects = await getProjects("active");
+    const teamList = await getTeamMembers("active");
+    const teamCount = teamList.length;
 
     const parts: string[] = [];
     if (todayMeetings.length > 0) {
@@ -235,12 +236,12 @@ export function generateDailyBriefing() {
       parts.push("Tidak ada item mendesak hari ini. Jadwal clear.");
     }
 
-    createNotification({
+    await createNotification({
       type: "daily_briefing",
       title: "Daily Briefing",
       message: `Mas DR, ${parts.join(". ")}.`,
     });
-    markNotifSent("daily_briefing");
+    await markNotifSent("daily_briefing");
     console.log("Proactive: daily briefing sent");
   } catch (err: any) {
     console.error("Daily briefing failed:", err?.message || err);
@@ -249,25 +250,25 @@ export function generateDailyBriefing() {
 
 export async function generateProactiveInsight() {
   try {
-    const insightCount = getInsightCountToday();
+    const insightCount = await getInsightCountToday();
     if (insightCount >= 3) return;
 
     const hour = getWIBHour();
     if (hour < 8 || hour > 20) return;
 
-    const minInterval = getSetting(`last_insight_time`);
+    const minInterval = await getSetting(`last_insight_time`);
     if (minInterval) {
       const lastTime = new Date(minInterval);
       const hoursSince = (Date.now() - lastTime.getTime()) / (1000 * 60 * 60);
       if (hoursSince < 4) return;
     }
 
-    const teamMembers = getTeamMembers("active");
-    const projects = getProjects("active");
-    const pending = getPendingActionItems();
-    const overdue = getOverdueActionItems();
-    const meetings = getUpcomingMeetings();
-    const tags = getConversationTags("mas_dr", 20);
+    const teamMembers = await getTeamMembers("active");
+    const projects = await getProjects("active");
+    const pending = await getPendingActionItems();
+    const overdue = await getOverdueActionItems();
+    const meetings = await getUpcomingMeetings();
+    const tags = await getConversationTags("mas_dr", 20);
 
     if (teamMembers.length === 0 && projects.length === 0 && pending.length === 0) return;
 
@@ -309,40 +310,40 @@ Respond ONLY with the insight text, nothing else.`;
     const insight = completion.choices[0]?.message?.content?.trim();
     if (!insight) return;
 
-    createNotification({
+    await createNotification({
       type: "darvis_insight",
       title: "DARVIS Insight",
       message: insight,
     });
-    incrementInsightCount();
-    setSetting("last_insight_time", new Date().toISOString());
+    await incrementInsightCount();
+    await setSetting("last_insight_time", new Date().toISOString());
     console.log(`Proactive: DARVIS insight generated (${insightCount + 1}/3 today)`);
   } catch (err: any) {
     console.error("Proactive insight failed:", err?.message || err);
   }
 }
 
-function aggressiveCleanup() {
+async function aggressiveCleanup() {
   try {
-    cleanupOldNotifications(24);
+    await cleanupOldNotifications(24);
 
-    const r1 = db.prepare(`
-      DELETE FROM notifications WHERE type = 'meeting_reminder' AND created_at < datetime('now', '-1 hours')
-    `).run();
+    const r1 = await pool.query(`
+      DELETE FROM notifications WHERE type = 'meeting_reminder' AND created_at::timestamp < NOW() - INTERVAL '1 hours'
+    `);
 
-    const r2 = db.prepare(`
-      DELETE FROM notifications WHERE read = 1 AND type NOT IN ('darvis_insight') AND created_at < datetime('now', '-2 hours')
-    `).run();
+    const r2 = await pool.query(`
+      DELETE FROM notifications WHERE read = 1 AND type NOT IN ('darvis_insight') AND created_at::timestamp < NOW() - INTERVAL '2 hours'
+    `);
 
-    const r3 = db.prepare(`
-      DELETE FROM notifications WHERE type IN ('overdue_alert', 'meeting_reminder') AND created_at < datetime('now', '-3 hours')
-    `).run();
+    const r3 = await pool.query(`
+      DELETE FROM notifications WHERE type IN ('overdue_alert', 'meeting_reminder') AND created_at::timestamp < NOW() - INTERVAL '3 hours'
+    `);
 
-    const r4 = db.prepare(`
-      DELETE FROM notifications WHERE created_at < datetime('now', '-12 hours')
-    `).run();
+    const r4 = await pool.query(`
+      DELETE FROM notifications WHERE created_at::timestamp < NOW() - INTERVAL '12 hours'
+    `);
 
-    const cleaned = (r1.changes || 0) + (r2.changes || 0) + (r3.changes || 0) + (r4.changes || 0);
+    const cleaned = (r1.rowCount || 0) + (r2.rowCount || 0) + (r3.rowCount || 0) + (r4.rowCount || 0);
     if (cleaned > 0) {
       console.log(`Cleanup: removed ${cleaned} old notifications`);
     }

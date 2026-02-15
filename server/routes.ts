@@ -734,7 +734,7 @@ function detectActionItemIntent(message: string): boolean {
   return patterns.some((p) => p.test(lower));
 }
 
-function buildSecretaryContext(message: string, isOwner: boolean = false): string {
+async function buildSecretaryContext(message: string, isOwner: boolean = false): Promise<string> {
   let context = "";
 
   const isTeam = detectTeamIntent(message);
@@ -744,7 +744,7 @@ function buildSecretaryContext(message: string, isOwner: boolean = false): strin
   const isPersona = detectPersonaIntent(message);
 
   if (isTeam || isOwner) {
-    const members = getTeamMembers("active");
+    const members = await getTeamMembers("active");
     if (members.length > 0) {
       context += `\n\n---\nNODE_TEAM — Orang-orang yang dikenal DR:\n`;
       const grouped: Record<string, typeof members> = {};
@@ -798,8 +798,8 @@ function buildSecretaryContext(message: string, isOwner: boolean = false): strin
   }
 
   if (isMeeting) {
-    const upcoming = getUpcomingMeetings();
-    const today = getTodayMeetings();
+    const upcoming = await getUpcomingMeetings();
+    const today = await getTodayMeetings();
     if (upcoming.length > 0 || today.length > 0) {
       context += `\n\n---\nNODE_MEETING — Jadwal Meeting:\n`;
       if (today.length > 0) {
@@ -825,7 +825,7 @@ function buildSecretaryContext(message: string, isOwner: boolean = false): strin
   }
 
   if (isProject) {
-    const projects = getProjects("active");
+    const projects = await getProjects("active");
     if (projects.length > 0) {
       context += `\n\n---\nNODE_PROJECTS — Project Aktif:\n`;
       for (const p of projects) {
@@ -843,8 +843,8 @@ function buildSecretaryContext(message: string, isOwner: boolean = false): strin
   }
 
   if (isAction || isTeam || isMeeting || isProject) {
-    const overdue = getOverdueActionItems();
-    const pending = getPendingActionItems();
+    const overdue = await getOverdueActionItems();
+    const pending = await getPendingActionItems();
     if (overdue.length > 0) {
       context += `\n\n---\nACTION ITEMS OVERDUE (${overdue.length}):\n`;
       for (const a of overdue.slice(0, 5)) {
@@ -947,7 +947,7 @@ Respond ONLY with valid JSON array.`;
       }));
 
     if (validItems.length > 0) {
-      bulkSaveProfileEnrichments(userId, validItems);
+      await bulkSaveProfileEnrichments(userId, validItems);
       console.log(`Profile enrichment: captured ${validItems.length} fact(s) about DR`);
     }
   } catch (err: any) {
@@ -1013,7 +1013,7 @@ Respond ONLY with valid JSON array.`;
       }));
 
     if (validItems.length > 0) {
-      bulkSavePersonaFeedback(userId, validItems);
+      await bulkSavePersonaFeedback(userId, validItems);
       console.log(`Passive listening: captured ${validItems.length} persona feedback(s)`);
     }
   } catch (err: any) {
@@ -1097,11 +1097,11 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/login", (req, res) => {
+  app.post("/api/login", async (req, res) => {
     try {
       const { password } = req.body;
-      const ownerPassword = getPassword("owner");
-      const contributorPassword = getPassword("contributor");
+      const ownerPassword = await getPassword("owner");
+      const contributorPassword = await getPassword("contributor");
 
       if (ownerPassword && password === ownerPassword) {
         req.session.isOwner = true;
@@ -1153,7 +1153,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/contributor-identify", (req, res) => {
+  app.post("/api/contributor-identify", async (req, res) => {
     try {
       if (req.session.isContributor !== true) {
         return res.status(403).json({ success: false, message: "Contributor only" });
@@ -1162,7 +1162,7 @@ export async function registerRoutes(
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "Nama harus diisi" });
       }
-      const member = getTeamMemberByNameOrAlias(name.trim());
+      const member = await getTeamMemberByNameOrAlias(name.trim());
       if (!member) {
         return res.json({ success: false, matched: false, message: "Nama tidak ditemukan di database tim" });
       }
@@ -1175,12 +1175,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/contributor-enrichments", (req, res) => {
+  app.get("/api/contributor-enrichments", async (req, res) => {
     try {
       if (req.session.isOwner !== true) {
         return res.status(403).json({ message: "Owner only" });
       }
-      const enrichments = getProfileEnrichments("contributor_shared");
+      const enrichments = await getProfileEnrichments("contributor_shared");
       return res.json({ enrichments });
     } catch (err: any) {
       console.error("Contributor enrichments API error:", err?.message || err);
@@ -1189,20 +1189,20 @@ export async function registerRoutes(
   });
 
   // ==================== TEAM MEMBERS API ====================
-  app.get("/api/team", (req, res) => {
+  app.get("/api/team", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const status = req.query.status as string | undefined;
-      return res.json({ members: getTeamMembers(status) });
+      return res.json({ members: await getTeamMembers(status) });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/team/:id", (req, res) => {
+  app.get("/api/team/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      const member = getTeamMemberById(Number(req.params.id));
+      const member = await getTeamMemberById(Number(req.params.id));
       if (!member) return res.status(404).json({ message: "Not found" });
       return res.json(member);
     } catch (err: any) {
@@ -1210,35 +1210,35 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/team", (req, res) => {
+  app.post("/api/team", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const { name, position, strengths, weaknesses, responsibilities, active_projects, notes } = req.body;
       if (!name) return res.status(400).json({ message: "Name required" });
-      const id = upsertTeamMember({ name, position, strengths, weaknesses, responsibilities, active_projects, notes });
+      const id = await upsertTeamMember({ name, position, strengths, weaknesses, responsibilities, active_projects, notes });
       return res.json({ success: true, id });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.patch("/api/team/:id", (req, res) => {
+  app.patch("/api/team/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const id = Number(req.params.id);
-      const member = getTeamMemberById(id);
+      const member = await getTeamMemberById(id);
       if (!member) return res.status(404).json({ message: "Not found" });
-      updateTeamMember(id, req.body);
+      await updateTeamMember(id, req.body);
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/team/:id", (req, res) => {
+  app.delete("/api/team/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteTeamMember(Number(req.params.id));
+      await deleteTeamMember(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1246,38 +1246,38 @@ export async function registerRoutes(
   });
 
   // ==================== MEETINGS API ====================
-  app.get("/api/meetings", (req, res) => {
+  app.get("/api/meetings", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const status = req.query.status as string | undefined;
-      return res.json({ meetings: getMeetings(status) });
+      return res.json({ meetings: await getMeetings(status) });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/meetings/upcoming", (req, res) => {
+  app.get("/api/meetings/upcoming", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      return res.json({ meetings: getUpcomingMeetings() });
+      return res.json({ meetings: await getUpcomingMeetings() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/meetings/today", (req, res) => {
+  app.get("/api/meetings/today", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      return res.json({ meetings: getTodayMeetings() });
+      return res.json({ meetings: await getTodayMeetings() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/meetings/:id", (req, res) => {
+  app.get("/api/meetings/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      const meeting = getMeetingById(Number(req.params.id));
+      const meeting = await getMeetingById(Number(req.params.id));
       if (!meeting) return res.status(404).json({ message: "Not found" });
       return res.json(meeting);
     } catch (err: any) {
@@ -1285,35 +1285,35 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/meetings", (req, res) => {
+  app.post("/api/meetings", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const { title, date_time, participants, agenda } = req.body;
       if (!title) return res.status(400).json({ message: "Title required" });
-      const id = createMeeting({ title, date_time, participants, agenda });
+      const id = await createMeeting({ title, date_time, participants, agenda });
       return res.json({ success: true, id });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.patch("/api/meetings/:id", (req, res) => {
+  app.patch("/api/meetings/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const id = Number(req.params.id);
-      const meeting = getMeetingById(id);
+      const meeting = await getMeetingById(id);
       if (!meeting) return res.status(404).json({ message: "Not found" });
-      updateMeeting(id, req.body);
+      await updateMeeting(id, req.body);
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/meetings/:id", (req, res) => {
+  app.delete("/api/meetings/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteMeeting(Number(req.params.id));
+      await deleteMeeting(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1321,39 +1321,39 @@ export async function registerRoutes(
   });
 
   // ==================== ACTION ITEMS API ====================
-  app.get("/api/action-items", (req, res) => {
+  app.get("/api/action-items", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const status = req.query.status as string | undefined;
       const assignee = req.query.assignee as string | undefined;
-      return res.json({ items: getActionItems({ status, assignee }) });
+      return res.json({ items: await getActionItems({ status, assignee }) });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/action-items/overdue", (req, res) => {
+  app.get("/api/action-items/overdue", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      return res.json({ items: getOverdueActionItems() });
+      return res.json({ items: await getOverdueActionItems() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/action-items/pending", (req, res) => {
+  app.get("/api/action-items/pending", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      return res.json({ items: getPendingActionItems() });
+      return res.json({ items: await getPendingActionItems() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/action-items/:id", (req, res) => {
+  app.get("/api/action-items/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      const item = getActionItemById(Number(req.params.id));
+      const item = await getActionItemById(Number(req.params.id));
       if (!item) return res.status(404).json({ message: "Not found" });
       return res.json(item);
     } catch (err: any) {
@@ -1361,35 +1361,35 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/action-items", (req, res) => {
+  app.post("/api/action-items", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const { title, assignee, deadline, priority, source, meeting_id, notes } = req.body;
       if (!title) return res.status(400).json({ message: "Title required" });
-      const id = createActionItem({ title, assignee, deadline, priority, source, meeting_id, notes });
+      const id = await createActionItem({ title, assignee, deadline, priority, source, meeting_id, notes });
       return res.json({ success: true, id });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.patch("/api/action-items/:id", (req, res) => {
+  app.patch("/api/action-items/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const id = Number(req.params.id);
-      const item = getActionItemById(id);
+      const item = await getActionItemById(id);
       if (!item) return res.status(404).json({ message: "Not found" });
-      updateActionItem(id, req.body);
+      await updateActionItem(id, req.body);
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/action-items/:id", (req, res) => {
+  app.delete("/api/action-items/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteActionItem(Number(req.params.id));
+      await deleteActionItem(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1397,20 +1397,20 @@ export async function registerRoutes(
   });
 
   // ==================== PROJECTS API ====================
-  app.get("/api/projects", (req, res) => {
+  app.get("/api/projects", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const status = req.query.status as string | undefined;
-      return res.json({ projects: getProjects(status) });
+      return res.json({ projects: await getProjects(status) });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/projects/:id", (req, res) => {
+  app.get("/api/projects/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      const project = getProjectById(Number(req.params.id));
+      const project = await getProjectById(Number(req.params.id));
       if (!project) return res.status(404).json({ message: "Not found" });
       return res.json(project);
     } catch (err: any) {
@@ -1418,35 +1418,35 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects", (req, res) => {
+  app.post("/api/projects", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const { name, description, pic, status, milestones, deadline, progress, notes } = req.body;
       if (!name) return res.status(400).json({ message: "Name required" });
-      const id = upsertProject({ name, description, pic, status, milestones, deadline, progress, notes });
+      const id = await upsertProject({ name, description, pic, status, milestones, deadline, progress, notes });
       return res.json({ success: true, id });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.patch("/api/projects/:id", (req, res) => {
+  app.patch("/api/projects/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const id = Number(req.params.id);
-      const project = getProjectById(id);
+      const project = await getProjectById(id);
       if (!project) return res.status(404).json({ message: "Not found" });
-      updateProject(id, req.body);
+      await updateProject(id, req.body);
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/projects/:id", (req, res) => {
+  app.delete("/api/projects/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteProject(Number(req.params.id));
+      await deleteProject(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1454,60 +1454,60 @@ export async function registerRoutes(
   });
 
   // ==================== NOTIFICATIONS API ====================
-  app.get("/api/notifications", (req, res) => {
+  app.get("/api/notifications", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const unreadOnly = req.query.unread === "true";
       const limit = Number(req.query.limit) || 50;
-      return res.json({ notifications: getNotifications(unreadOnly, limit), unread_count: getUnreadNotificationCount() });
+      return res.json({ notifications: await getNotifications(unreadOnly, limit), unread_count: await getUnreadNotificationCount() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.get("/api/notifications/count", (req, res) => {
+  app.get("/api/notifications/count", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      return res.json({ count: getUnreadNotificationCount() });
+      return res.json({ count: await getUnreadNotificationCount() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.post("/api/notifications/:id/read", (req, res) => {
+  app.post("/api/notifications/:id/read", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      markNotificationRead(Number(req.params.id));
+      await markNotificationRead(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.post("/api/notifications/read-all", (req, res) => {
+  app.post("/api/notifications/read-all", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      markAllNotificationsRead();
+      await markAllNotificationsRead();
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/notifications/:id", (req, res) => {
+  app.delete("/api/notifications/:id", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteNotification(Number(req.params.id));
+      await deleteNotification(Number(req.params.id));
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.delete("/api/notifications", (req, res) => {
+  app.delete("/api/notifications", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
-      deleteAllNotifications();
+      await deleteAllNotifications();
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1519,13 +1519,13 @@ export async function registerRoutes(
     return res.json({ publicKey: getVapidPublicKey() });
   });
 
-  app.post("/api/push/subscribe", (req, res) => {
+  app.post("/api/push/subscribe", async (req, res) => {
     try {
       const { subscription } = req.body;
       if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
         return res.status(400).json({ message: "Invalid subscription" });
       }
-      savePushSubscription({
+      await savePushSubscription({
         endpoint: subscription.endpoint,
         keys_p256dh: subscription.keys.p256dh,
         keys_auth: subscription.keys.auth,
@@ -1570,24 +1570,24 @@ export async function registerRoutes(
   });
 
   // ==================== DASHBOARD SUMMARY API ====================
-  app.get("/api/dashboard", (req, res) => {
+  app.get("/api/dashboard", async (req, res) => {
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       return res.json({
-        team_count: getTeamMembers("active").length,
-        upcoming_meetings: getUpcomingMeetings().length,
-        today_meetings: getTodayMeetings().length,
-        pending_actions: getPendingActionItems().length,
-        overdue_actions: getOverdueActionItems().length,
-        active_projects: getProjects("active").length,
-        unread_notifications: getUnreadNotificationCount(),
+        team_count: (await getTeamMembers("active")).length,
+        upcoming_meetings: (await getUpcomingMeetings()).length,
+        today_meetings: (await getTodayMeetings()).length,
+        pending_actions: (await getPendingActionItems()).length,
+        overdue_actions: (await getOverdueActionItems()).length,
+        active_projects: (await getProjects("active")).length,
+        unread_notifications: await getUnreadNotificationCount(),
       });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
 
-  app.post("/api/change-password", (req, res) => {
+  app.post("/api/change-password", async (req, res) => {
     try {
       if (req.session.isOwner !== true) {
         return res.status(403).json({ success: false, message: "Owner only" });
@@ -1603,7 +1603,7 @@ export async function registerRoutes(
         if (!currentPassword) {
           return res.status(400).json({ success: false, message: "Password lama harus diisi" });
         }
-        const currentOwnerPw = getPassword("owner");
+        const currentOwnerPw = await getPassword("owner");
         if (currentOwnerPw && currentPassword !== currentOwnerPw) {
           return res.status(401).json({ success: false, message: "Password lama salah" });
         }
@@ -1611,7 +1611,7 @@ export async function registerRoutes(
           return res.status(400).json({ success: false, message: "Password owner belum dikonfigurasi" });
         }
       }
-      setSetting(`${type}_password`, newPassword);
+      await setSetting(`${type}_password`, newPassword);
       return res.json({ success: true, message: `Password ${type === "owner" ? "Owner" : "Contributor"} berhasil diubah` });
     } catch (err: any) {
       console.error("Change password error:", err?.message || err);
@@ -1619,15 +1619,15 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/history", (req, res) => {
+  app.get("/api/history", async (req, res) => {
     try {
       const roomId = req.query.roomId ? parseInt(req.query.roomId as string) : null;
       if (roomId) {
-        const msgs = getAllMessagesForRoom(roomId);
+        const msgs = await getAllMessagesForRoom(roomId);
         return res.json({ messages: msgs.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })) });
       }
       const userId = getUserId(req);
-      const msgs = getAllMessages(userId);
+      const msgs = await getAllMessages(userId);
       const response: HistoryResponse = {
         messages: msgs.map((m) => ({
           role: m.role as "user" | "assistant",
@@ -1641,18 +1641,18 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/clear", (req, res) => {
+  app.post("/api/clear", async (req, res) => {
     try {
       const userId = getUserId(req);
       const roomId = req.body?.roomId ? parseInt(req.body.roomId) : null;
       if (roomId) {
-        clearRoomHistory(roomId);
+        await clearRoomHistory(roomId);
       } else {
-        clearHistory(userId);
+        await clearHistory(userId);
       }
-      clearPreferences(userId);
-      clearPersonaFeedback(userId);
-      clearConversationTags(userId);
+      await clearPreferences(userId);
+      await clearPersonaFeedback(userId);
+      await clearConversationTags(userId);
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Clear API error:", err?.message || err);
@@ -1661,11 +1661,11 @@ export async function registerRoutes(
   });
 
   // ==================== CHAT ROOMS (Owner-only) ====================
-  app.get("/api/rooms", (req, res) => {
+  app.get("/api/rooms", async (req, res) => {
     try {
       if (!req.session.isOwner) return res.json({ rooms: [] });
       const userId = getUserId(req);
-      const rooms = getChatRooms(userId);
+      const rooms = await getChatRooms(userId);
       return res.json({ rooms });
     } catch (err: any) {
       console.error("Rooms API error:", err?.message || err);
@@ -1673,13 +1673,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rooms", (req, res) => {
+  app.post("/api/rooms", async (req, res) => {
     try {
       if (!req.session.isOwner) return res.status(403).json({ message: "Owner only" });
       const userId = getUserId(req);
       const title = req.body?.title || "Obrolan Baru";
-      const id = createChatRoom(userId, title);
-      const room = getChatRoomById(id);
+      const id = await createChatRoom(userId, title);
+      const room = await getChatRoomById(id);
       return res.json({ room });
     } catch (err: any) {
       console.error("Create room error:", err?.message || err);
@@ -1687,13 +1687,13 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/rooms/:id", (req, res) => {
+  app.patch("/api/rooms/:id", async (req, res) => {
     try {
       if (!req.session.isOwner) return res.status(403).json({ message: "Owner only" });
       const id = parseInt(req.params.id);
       const { title } = req.body;
-      if (title) renameChatRoom(id, title);
-      const room = getChatRoomById(id);
+      if (title) await renameChatRoom(id, title);
+      const room = await getChatRoomById(id);
       return res.json({ room });
     } catch (err: any) {
       console.error("Rename room error:", err?.message || err);
@@ -1701,11 +1701,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/rooms/:id", (req, res) => {
+  app.delete("/api/rooms/:id", async (req, res) => {
     try {
       if (!req.session.isOwner) return res.status(403).json({ message: "Owner only" });
       const id = parseInt(req.params.id);
-      deleteChatRoom(id);
+      await deleteChatRoom(id);
       return res.json({ success: true });
     } catch (err: any) {
       console.error("Delete room error:", err?.message || err);
@@ -1713,7 +1713,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/rooms/merge", (req, res) => {
+  app.post("/api/rooms/merge", async (req, res) => {
     try {
       if (!req.session.isOwner) return res.status(403).json({ message: "Owner only" });
       const { targetRoomId, sourceRoomIds } = req.body;
@@ -1721,7 +1721,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "targetRoomId dan sourceRoomIds diperlukan" });
       }
       const userId = getUserId(req);
-      const userRooms = getChatRooms(userId);
+      const userRooms = await getChatRooms(userId);
       const userRoomIds = new Set(userRooms.map((r: any) => r.id));
       const allIds = [targetRoomId, ...sourceRoomIds];
       for (const id of allIds) {
@@ -1729,7 +1729,7 @@ export async function registerRoutes(
           return res.status(403).json({ message: `Room #${id} bukan milik user ini` });
         }
       }
-      mergeRooms(targetRoomId, sourceRoomIds);
+      await mergeRooms(targetRoomId, sourceRoomIds);
       return res.json({ success: true, targetRoomId });
     } catch (err: any) {
       console.error("Merge rooms error:", err?.message || err);
@@ -1737,10 +1737,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/conversation-tags", (req, res) => {
+  app.get("/api/conversation-tags", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const tags = getConversationTags(userId);
+      const tags = await getConversationTags(userId);
       return res.json({ tags });
     } catch (err: any) {
       console.error("Conversation tags API error:", err?.message || err);
@@ -1748,10 +1748,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/persona-feedback", (req, res) => {
+  app.get("/api/persona-feedback", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const feedback = getPersonaFeedback(userId);
+      const feedback = await getPersonaFeedback(userId);
       return res.json({ feedback });
     } catch (err: any) {
       console.error("Persona feedback API error:", err?.message || err);
@@ -1759,14 +1759,14 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/profile-enrichments", (req, res) => {
+  app.get("/api/profile-enrichments", async (req, res) => {
     try {
       const userId = getUserId(req);
       const isOwner = req.session.isOwner === true;
-      let enrichments = getProfileEnrichments(userId);
+      let enrichments = await getProfileEnrichments(userId);
       if (isOwner && enrichments.length === 0) {
-        seedDRProfileForUser(userId);
-        enrichments = getProfileEnrichments(userId);
+        await seedDRProfileForUser(userId);
+        enrichments = await getProfileEnrichments(userId);
       }
       return res.json({ enrichments });
     } catch (err: any) {
@@ -1775,10 +1775,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/preferences", (req, res) => {
+  app.get("/api/preferences", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const preferences = getLearnedPreferences(userId);
+      const preferences = await getLearnedPreferences(userId);
       return res.json({ preferences });
     } catch (err: any) {
       console.error("Preferences API error:", err?.message || err);
@@ -1789,10 +1789,10 @@ export async function registerRoutes(
   app.post("/api/seed-profile", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const existingPrefs = getLearnedPreferences(userId);
+      const existingPrefs = await getLearnedPreferences(userId);
       const hasSeed = existingPrefs.some(p => p.source_summary === "SEED_FROM_PROFILE");
 
-      const existingTeam = getTeamMembers();
+      const existingTeam = await getTeamMembers();
       const hasFullSeed = existingTeam.some(m => m.notes === "SEED_FROM_PROFILE" && m.category === "direksi");
       if (!hasFullSeed) {
         const allPeople = [
@@ -1835,7 +1835,7 @@ export async function registerRoutes(
           { name: "Nata", position: "General Affairs (GA) Umum", responsibilities: "General affairs, urusan umum lintas PT / Solid Group", notes: "SEED_FROM_PROFILE", category: "team" },
         ];
         for (const member of allPeople) {
-          upsertTeamMember(member);
+          await upsertTeamMember(member);
         }
         console.log(`Secretary: seeded ${allPeople.length} people (BD team + direksi + management + family)`);
       }
@@ -1861,7 +1861,7 @@ export async function registerRoutes(
         { category: "preferensi_komunikasi", insight: "Tidak suka dipanggil 'Boss' — terlalu hierarkis. Panggilan yang biasa: DR, Raha, Bapak, Bapa, Abah, YKW, mas DR", confidence: 0.95, source_summary: "SEED_FROM_PROFILE" },
       ];
 
-      bulkUpsertPreferences(userId, seedPreferences);
+      await bulkUpsertPreferences(userId, seedPreferences);
       return res.json({ success: true, message: "Profile seeded successfully", count: seedPreferences.length });
     } catch (err: any) {
       console.error("Seed profile error:", err?.message || err);
@@ -1965,9 +1965,9 @@ export async function registerRoutes(
       if (isContributor && !req.session.contributorTeamMemberId) {
         const msgLower = message.toLowerCase().trim();
         let matched: TeamMember | undefined;
-        matched = getTeamMemberByNameOrAlias(msgLower);
+        matched = await getTeamMemberByNameOrAlias(msgLower);
         if (!matched) {
-          const allMembers = getTeamMembers();
+          const allMembers = await getTeamMembers();
           const wordBoundaryMatch = (text: string, term: string): boolean => {
             if (term.length < 3) return false;
             const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -2031,7 +2031,7 @@ CARA NGOBROL:
         const contribTeamId = req.session.contributorTeamMemberId;
         const contribTeamName = req.session.contributorTeamMemberName;
         if (contribTeamId && contribTeamName) {
-          const contribMember = getTeamMemberByNameOrAlias(contribTeamName);
+          const contribMember = await getTeamMemberByNameOrAlias(contribTeamName);
           const existingPersona = contribMember ? [
             contribMember.work_style ? `Gaya kerja: ${contribMember.work_style}` : null,
             contribMember.communication_style ? `Gaya komunikasi: ${contribMember.communication_style}` : null,
@@ -2117,7 +2117,7 @@ GAYA NGOBROL:
       }
 
       if (isOwner) {
-        const secretaryCtx = buildSecretaryContext(message, isOwner);
+        const secretaryCtx = await buildSecretaryContext(message, isOwner);
         if (secretaryCtx) {
           systemContent += secretaryCtx;
         }
@@ -2226,7 +2226,7 @@ GAYA NGOBROL:
       }
 
       if (!voiceMode) {
-        const rawFeedbacks = getPersonaFeedback(userId);
+        const rawFeedbacks = await getPersonaFeedback(userId);
         const personaFeedbacks = applyMemoryGovernor(rawFeedbacks, 5);
         if (personaFeedbacks.length > 0) {
           const grouped: Record<string, { feedback: string; sentiment: string }[]> = {};
@@ -2249,8 +2249,8 @@ GAYA NGOBROL:
           systemContent += fbBlock;
         }
 
-        const rawEnrichments = getProfileEnrichments(userId);
-        const contributorEnrichments = getProfileEnrichments("contributor_shared");
+        const rawEnrichments = await getProfileEnrichments(userId);
+        const contributorEnrichments = await getProfileEnrichments("contributor_shared");
         const combinedEnrichments = [...rawEnrichments, ...contributorEnrichments];
         const profileEnrichments = applyMemoryGovernor(combinedEnrichments, 5);
         if (profileEnrichments.length > 0) {
@@ -2283,7 +2283,7 @@ GAYA NGOBROL:
           systemContent += enrichBlock;
         }
 
-        const rawPrefs = getLearnedPreferences(userId);
+        const rawPrefs = await getLearnedPreferences(userId);
         const learnedPrefs = applyMemoryGovernor(rawPrefs, 5);
         if (learnedPrefs.length > 0) {
           const grouped: Record<string, string[]> = {};
@@ -2331,7 +2331,7 @@ GAYA NGOBROL:
       const maxTokens = wantsDetail ? 2048 : (voiceMode ? 512 : 1024);
       console.log(`[PROMPT] size: ~${systemTokenEstimate}tok, nodes: [${nodesUsed.join(", ")}], voice: ${voiceMode}, msgWords: ${msgWordCount}, reasoning: ${reasoningEffort}, maxTok: ${maxTokens}`);
 
-      const summary = activeRoomId ? getRoomSummary(activeRoomId) : getSummary(userId);
+      const summary = activeRoomId ? await getRoomSummary(activeRoomId) : await getSummary(userId);
       if (summary) {
         apiMessages.push({
           role: "system",
@@ -2340,7 +2340,7 @@ GAYA NGOBROL:
       }
 
       const contextBudget = nodesUsed.length >= 3 ? 10 : 20;
-      const recentMessages = activeRoomId ? getLastMessagesForRoom(activeRoomId, contextBudget) : getLastMessages(userId, contextBudget);
+      const recentMessages = activeRoomId ? await getLastMessagesForRoom(activeRoomId, contextBudget) : await getLastMessages(userId, contextBudget);
       for (const msg of recentMessages) {
         apiMessages.push({
           role: msg.role === "user" ? "user" : "assistant",
@@ -2435,7 +2435,7 @@ GAYA NGOBROL:
 
           if (roomActionResult && !activeRoomId) {
             if (roomActionResult.action === "create_new") {
-              const newRoomId = createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
+              const newRoomId = await createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
               activeRoomId = newRoomId;
               roomActionResult.roomId = newRoomId;
               console.log(`Auto-created room #${newRoomId}: "${roomActionResult.roomTitle}"`);
@@ -2462,7 +2462,7 @@ GAYA NGOBROL:
 
           if (roomActionResult && !activeRoomId) {
             if (roomActionResult.action === "create_new") {
-              const newRoomId = createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
+              const newRoomId = await createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
               activeRoomId = newRoomId;
               roomActionResult.roomId = newRoomId;
               console.log(`Auto-created room #${newRoomId}: "${roomActionResult.roomTitle}"`);
@@ -2481,11 +2481,11 @@ GAYA NGOBROL:
         res.end();
 
         if (activeRoomId) {
-          saveMessageToRoom(activeRoomId, userId, "user", message);
-          saveMessageToRoom(activeRoomId, userId, "assistant", reply);
+          await saveMessageToRoom(activeRoomId, userId, "user", message);
+          await saveMessageToRoom(activeRoomId, userId, "assistant", reply);
         } else {
-          saveMessage(userId, "user", message);
-          saveMessage(userId, "assistant", reply);
+          await saveMessage(userId, "user", message);
+          await saveMessage(userId, "assistant", reply);
         }
 
         try {
@@ -2495,7 +2495,7 @@ GAYA NGOBROL:
           if (tone.evaluative) toneSignalsForTag.push("evaluatif");
           if (tone.urgent) toneSignalsForTag.push("urgensi");
 
-          saveConversationTag(userId, {
+          await saveConversationTag(userId, {
             context_mode: contextMode,
             decision_type: decisionType,
             emotional_tone: toneSignalsForTag.length > 0 ? toneSignalsForTag.join(",") : null,
@@ -2532,7 +2532,7 @@ GAYA NGOBROL:
           });
         }
 
-        const msgCount = activeRoomId ? getMessageCountForRoom(activeRoomId) : getMessageCount(userId);
+        const msgCount = activeRoomId ? await getMessageCountForRoom(activeRoomId) : await getMessageCount(userId);
         console.log(`Post-chat: isOwner=${isOwner}, isContributor=${isContributor}, msgLen=${message.length}, replyLen=${reply.length}`);
         if (isOwner) {
           console.log("Post-chat: calling extractSecretaryData NOW");
@@ -2604,7 +2604,7 @@ GAYA NGOBROL:
 }
 
 async function extractPreferences(userId: string) {
-  const allMessages = getAllMessages(userId);
+  const allMessages = await getAllMessages(userId);
   if (allMessages.length < 6) return;
 
   const last20 = allMessages.slice(-20);
@@ -2612,7 +2612,7 @@ async function extractPreferences(userId: string) {
     .map((m) => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`)
     .join("\n\n");
 
-  const existingPrefs = getLearnedPreferences(userId);
+  const existingPrefs = await getLearnedPreferences(userId);
   const existingContext = existingPrefs.length > 0
     ? `\nPreferensi yang sudah diketahui sebelumnya:\n${existingPrefs.map(p => `- [${p.category}] ${p.insight}`).join("\n")}\n\nPerbarui atau tambahkan insight baru berdasarkan percakapan terbaru. Jangan duplikasi yang sudah ada kecuali ada perubahan.`
     : "";
@@ -2680,7 +2680,7 @@ Respond ONLY with valid JSON array, no other text.`;
       }));
 
     if (validPrefs.length > 0) {
-      bulkUpsertPreferences(userId, validPrefs);
+      await bulkUpsertPreferences(userId, validPrefs);
       console.log(`Auto-learn: extracted ${validPrefs.length} preferences for ${userId}`);
     }
   } catch (err: any) {
@@ -2689,7 +2689,7 @@ Respond ONLY with valid JSON array, no other text.`;
 }
 
 async function generateSummary(userId: string) {
-  const allMessages = getAllMessages(userId);
+  const allMessages = await getAllMessages(userId);
   if (allMessages.length < 10) return;
 
   const last30 = allMessages.slice(-30);
@@ -2697,7 +2697,7 @@ async function generateSummary(userId: string) {
     .map((m) => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`)
     .join("\n\n");
 
-  const existingSummary = getSummary(userId);
+  const existingSummary = await getSummary(userId);
 
   const prompt = existingSummary
     ? `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nRingkasan sebelumnya:\n${existingSummary}\n\nPercakapan terbaru:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) yang menggabungkan ringkasan sebelumnya dan percakapan terbaru. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`
@@ -2711,7 +2711,7 @@ async function generateSummary(userId: string) {
 
   const summaryText = completion.choices[0]?.message?.content?.trim();
   if (summaryText) {
-    upsertSummary(userId, summaryText);
+    await upsertSummary(userId, summaryText);
     console.log(`Auto-summary generated for ${userId} (${allMessages.length} messages)`);
   }
 }
@@ -2724,7 +2724,7 @@ interface RoomAction {
 }
 
 async function detectRoomAction(userMessage: string, userId: string): Promise<RoomAction> {
-  const roomSummaries = getAllRoomSummaries(userId);
+  const roomSummaries = await getAllRoomSummaries(userId);
   if (roomSummaries.length === 0) {
     const isSubstantive = userMessage.trim().split(/\s+/).length >= 3;
     if (!isSubstantive) return { action: "stay_lobby", reason: "Pesan terlalu singkat" };
@@ -2785,7 +2785,7 @@ Jawab HANYA dalam format JSON (tanpa markdown):
 }
 
 async function generateRoomSummary(roomId: number, userId: string) {
-  const allMessages = getAllMessagesForRoom(roomId);
+  const allMessages = await getAllMessagesForRoom(roomId);
   if (allMessages.length < 10) return;
 
   const last30 = allMessages.slice(-30);
@@ -2793,7 +2793,7 @@ async function generateRoomSummary(roomId: number, userId: string) {
     .map((m) => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`)
     .join("\n\n");
 
-  const existingSummary = getRoomSummary(roomId);
+  const existingSummary = await getRoomSummary(roomId);
 
   const prompt = existingSummary
     ? `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nRingkasan sebelumnya:\n${existingSummary}\n\nPercakapan terbaru:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) yang menggabungkan ringkasan sebelumnya dan percakapan terbaru. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`
@@ -2807,14 +2807,14 @@ async function generateRoomSummary(roomId: number, userId: string) {
 
   const summaryText = completion.choices[0]?.message?.content?.trim();
   if (summaryText) {
-    setRoomSummary(roomId, summaryText);
+    await setRoomSummary(roomId, summaryText);
     console.log(`Auto-summary generated for room ${roomId} (${allMessages.length} messages)`);
   }
 }
 
 async function extractContributorSelfProfile(memberName: string, userMessage: string, assistantReply: string) {
   const combinedText = `${memberName}: ${userMessage}\n\nDARVIS: ${assistantReply}`;
-  const existingMember = getTeamMemberByNameOrAlias(memberName);
+  const existingMember = await getTeamMemberByNameOrAlias(memberName);
   if (!existingMember) return;
 
   const existingData = [
@@ -2875,7 +2875,7 @@ RULES:
     const hasUpdate = parsed.position || parsed.responsibilities || parsed.work_style || parsed.communication_style || parsed.triggers || parsed.commitments || parsed.personality_notes || parsed.strengths || parsed.weaknesses;
     if (!hasUpdate) return;
 
-    upsertTeamMember({
+    await upsertTeamMember({
       name: existingMember.name,
       position: parsed.position || existingMember.position || null,
       strengths: appendIfNew(existingMember.strengths, parsed.strengths),
@@ -2904,9 +2904,9 @@ async function extractSecretaryData(userMessage: string, assistantReply: string)
   const wibTimeStr = getWIBTimeString();
   const wibDayName = getWIBDayName();
 
-  const teamMembers = getTeamMembers();
-  const existingProjects = getProjects();
-  const pendingActions = getPendingActionItems();
+  const teamMembers = await getTeamMembers();
+  const existingProjects = await getProjects();
+  const pendingActions = await getPendingActionItems();
 
   const existingContext = [
     teamMembers.length > 0 ? `Orang yang sudah tercatat: ${teamMembers.map(m => `${m.name}${m.aliases ? ` (alias: ${m.aliases})` : ""} [${m.category}]${m.position ? ` — ${m.position}` : ""}`).join(", ")}` : "",
@@ -3027,9 +3027,9 @@ Respond ONLY with valid JSON, no other text.`;
             continue;
           }
           const memberName = member.name.trim();
-          const existingByAlias = getTeamMemberByNameOrAlias(memberName);
+          const existingByAlias = await getTeamMemberByNameOrAlias(memberName);
           if (existingByAlias) {
-            const resultId = upsertTeamMember({
+            const resultId = await upsertTeamMember({
               name: existingByAlias.name,
               position: member.position || existingByAlias.position || null,
               strengths: member.strengths || existingByAlias.strengths || null,
@@ -3044,11 +3044,11 @@ Respond ONLY with valid JSON, no other text.`;
               commitments: appendIfNew(existingByAlias.commitments, member.commitments),
               personality_notes: appendIfNew(existingByAlias.personality_notes, member.personality_notes),
             });
-            const verify = getTeamMemberByNameOrAlias(existingByAlias.name);
+            const verify = await getTeamMemberByNameOrAlias(existingByAlias.name);
             const personaUpdated = member.work_style || member.communication_style || member.triggers || member.commitments || member.personality_notes;
             console.log(`Secretary: updated "${existingByAlias.name}" (id=${resultId}, matched from "${memberName}")${personaUpdated ? " [+persona]" : ""} — DB verify: ${verify ? "OK" : "FAILED"}`);
           } else {
-            const resultId = upsertTeamMember({
+            const resultId = await upsertTeamMember({
               name: memberName,
               position: member.position || null,
               strengths: member.strengths || null,
@@ -3063,7 +3063,7 @@ Respond ONLY with valid JSON, no other text.`;
               commitments: member.commitments || null,
               personality_notes: member.personality_notes || null,
             });
-            const verify = getTeamMemberByNameOrAlias(memberName);
+            const verify = await getTeamMemberByNameOrAlias(memberName);
             const personaAdded = member.work_style || member.communication_style || member.triggers || member.commitments || member.personality_notes;
             console.log(`Secretary: ADDED NEW "${memberName}" (id=${resultId}) [${member.category || "external"}]${personaAdded ? " [+persona]" : ""} — DB verify: ${verify ? "OK (id=" + verify.id + ")" : "FAILED — DATA NOT SAVED!"}`);
             if (!verify) {
@@ -3079,7 +3079,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.meetings) && parsed.meetings.length > 0) {
       for (const meeting of parsed.meetings.slice(0, 5)) {
         if (meeting.title && typeof meeting.title === "string") {
-          const meetingId = createMeeting({
+          const meetingId = await createMeeting({
             title: meeting.title,
             date_time: meeting.date_time || null,
             participants: meeting.participants || null,
@@ -3095,13 +3095,13 @@ Respond ONLY with valid JSON, no other text.`;
 
               if (diffMin > 0 && diffMin <= 35) {
                 const reminderMsg = `${meeting.title}${meeting.participants ? ` — Peserta: ${meeting.participants}` : ""}`;
-                createNotification({
+                await createNotification({
                   type: "meeting_reminder",
                   title: `Meeting dalam ${Math.round(diffMin)} menit`,
                   message: reminderMsg,
                   data: JSON.stringify({ meeting_id: meetingId }),
                 });
-                setSetting(`meeting_reminder_${meetingId}_${meeting.date_time}`, "1");
+                await setSetting(`meeting_reminder_${meetingId}_${meeting.date_time}`, "1");
                 console.log(`Secretary: immediate reminder for "${meeting.title}" (${Math.round(diffMin)}min away)`);
               } else if (diffMin > 35) {
                 console.log(`Secretary: meeting "${meeting.title}" scheduled at ${meeting.date_time} WIB — proactive reminder will fire 30min before`);
@@ -3117,7 +3117,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.action_items) && parsed.action_items.length > 0) {
       for (const item of parsed.action_items.slice(0, 5)) {
         if (item.title && typeof item.title === "string") {
-          createActionItem({
+          await createActionItem({
             title: item.title,
             assignee: item.assignee || null,
             deadline: item.deadline || null,
@@ -3133,7 +3133,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.projects) && parsed.projects.length > 0) {
       for (const project of parsed.projects.slice(0, 5)) {
         if (project.name && typeof project.name === "string") {
-          upsertProject({
+          await upsertProject({
             name: project.name,
             description: project.description || null,
             pic: project.pic || null,
@@ -3151,7 +3151,7 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.follow_ups) && parsed.follow_ups.length > 0) {
       for (const fu of parsed.follow_ups.slice(0, 3)) {
         if (fu.text && typeof fu.text === "string") {
-          createActionItem({
+          await createActionItem({
             title: fu.text,
             assignee: "DR",
             deadline: fu.deadline_hint || null,

@@ -1,11 +1,12 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import Database from "better-sqlite3";
-import SqliteStoreFactory from "better-sqlite3-session-store";
+import pgSession from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startProactiveSystem } from "./proactive";
+import { initDatabase } from "./db";
+import pool from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -44,17 +45,14 @@ if (isProduction && !process.env.SESSION_SECRET) {
   process.exit(1);
 }
 
-const SqliteStore = SqliteStoreFactory(session);
-const sessionDb = new Database("darvis.db");
+const PgStore = pgSession(session);
 
 app.use(
   session({
-    store: new SqliteStore({
-      client: sessionDb,
-      expired: {
-        clear: true,
-        intervalMs: 900000,
-      },
+    store: new PgStore({
+      pool: pool,
+      tableName: "sessions",
+      createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || "darvis-fallback-secret",
     resave: false,
@@ -107,6 +105,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await initDatabase();
+  console.log("PostgreSQL database initialized");
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -122,9 +123,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -132,10 +130,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
