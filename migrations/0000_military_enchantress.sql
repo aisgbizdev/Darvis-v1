@@ -1,4 +1,4 @@
-CREATE TABLE "action_items" (
+CREATE TABLE IF NOT EXISTS "action_items" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"title" text NOT NULL,
 	"assignee" text,
@@ -13,13 +13,13 @@ CREATE TABLE "action_items" (
 	"completed_at" text
 );
 --> statement-breakpoint
-CREATE TABLE "app_settings" (
+CREATE TABLE IF NOT EXISTS "app_settings" (
 	"key" text PRIMARY KEY NOT NULL,
 	"value" text NOT NULL,
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "chat_rooms" (
+CREATE TABLE IF NOT EXISTS "chat_rooms" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"session_id" text NOT NULL,
 	"title" text DEFAULT 'Obrolan Baru' NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE "chat_rooms" (
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "conversation_tags" (
+CREATE TABLE IF NOT EXISTS "conversation_tags" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"context_mode" text DEFAULT 'general' NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE "conversation_tags" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "conversations" (
+CREATE TABLE IF NOT EXISTS "conversations" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text DEFAULT 'mas_dr' NOT NULL,
 	"role" text NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE "conversations" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "learned_preferences" (
+CREATE TABLE IF NOT EXISTS "learned_preferences" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text DEFAULT 'mas_dr' NOT NULL,
 	"category" text NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE "learned_preferences" (
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "meetings" (
+CREATE TABLE IF NOT EXISTS "meetings" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"title" text NOT NULL,
 	"date_time" text,
@@ -74,7 +74,7 @@ CREATE TABLE "meetings" (
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "notifications" (
+CREATE TABLE IF NOT EXISTS "notifications" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"type" text NOT NULL,
 	"title" text NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE "notifications" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "persona_feedback" (
+CREATE TABLE IF NOT EXISTS "persona_feedback" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text DEFAULT 'mas_dr' NOT NULL,
 	"target" text NOT NULL,
@@ -95,7 +95,7 @@ CREATE TABLE "persona_feedback" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "profile_enrichments" (
+CREATE TABLE IF NOT EXISTS "profile_enrichments" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text DEFAULT 'mas_dr' NOT NULL,
 	"category" text NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE "profile_enrichments" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "projects" (
+CREATE TABLE IF NOT EXISTS "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
@@ -119,7 +119,7 @@ CREATE TABLE "projects" (
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "push_subscriptions" (
+CREATE TABLE IF NOT EXISTS "push_subscriptions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"endpoint" text NOT NULL,
 	"keys_p256dh" text NOT NULL,
@@ -127,20 +127,20 @@ CREATE TABLE "push_subscriptions" (
 	"created_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "sessions" (
+CREATE TABLE IF NOT EXISTS "sessions" (
 	"sid" varchar PRIMARY KEY NOT NULL,
 	"sess" json NOT NULL,
 	"expire" timestamp (6) NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "summaries" (
+CREATE TABLE IF NOT EXISTS "summaries" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text DEFAULT 'mas_dr' NOT NULL,
 	"summary" text NOT NULL,
 	"updated_at" text DEFAULT now()::text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "team_members" (
+CREATE TABLE IF NOT EXISTS "team_members" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"position" text,
