@@ -15,15 +15,15 @@ import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, P
 
 function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
   return (
-    <div className={`markdown-content text-[13px] sm:text-sm leading-relaxed ${className}`}>
+    <div className={`markdown-content text-sm sm:text-base leading-relaxed ${className}`}>
       <ReactMarkdown
         components={{
           p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
           strong: ({ children }) => <strong className="font-bold">{children}</strong>,
           em: ({ children }) => <em className="italic">{children}</em>,
-          h1: ({ children }) => <h1 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-[15px] font-bold mb-1.5 mt-2.5 first:mt-0">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-[14px] font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
+          h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-bold mb-1.5 mt-2.5 first:mt-0">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-[15px] font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
           ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
           li: ({ children }) => <li className="mb-0.5">{children}</li>,
@@ -31,9 +31,9 @@ function MarkdownContent({ content, className = "" }: { content: string; classNa
           code: ({ children, className: codeClassName }) => {
             const isBlock = codeClassName?.includes("language-");
             if (isBlock) {
-              return <pre className="bg-muted/50 rounded-md p-2.5 my-2 overflow-x-auto text-xs"><code>{children}</code></pre>;
+              return <pre className="bg-muted/50 rounded-md p-2.5 my-2 overflow-x-auto text-xs sm:text-sm"><code>{children}</code></pre>;
             }
-            return <code className="bg-muted/50 rounded px-1.5 py-0.5 text-xs font-mono">{children}</code>;
+            return <code className="bg-muted/50 rounded px-1.5 py-0.5 text-xs sm:text-sm font-mono">{children}</code>;
           },
           hr: () => <hr className="my-3 border-muted-foreground/20" />,
         }}
@@ -118,7 +118,7 @@ function UserBubble({ content, index, images }: { content: string; index: number
             ))}
           </div>
         )}
-        <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-user-${index}`}>{content}</p>
+        <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap" data-testid={`text-user-${index}`}>{content}</p>
       </div>
     </div>
   );
