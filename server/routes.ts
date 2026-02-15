@@ -663,12 +663,15 @@ function detectTeamIntent(message: string): boolean {
     /\b(rekrut|hire|pecat|fire|promosi|rotasi|mutasi)\b/,
     /\b(delegasi|assign|kasih\s+tugas|suruh|minta\s+\w+\s+untuk)\b/,
     /\b(evaluasi|review\s+(kinerja|performance)|assessment)\b/,
-    /\b(andi|sari|budi|dina|rudi|fajar|dewi|agus|rina|hendra)\b/i,
     /\b(strengths|kelemahan|kelebihan|kekurangan|potensi)\b/,
     /\b(leadership|kepemimpinan|coaching|mentoring|bimbingan)\b/,
     /\b(sekretaris|direktur|manajer|manager|head|kepala|koordinator|admin\s+officer)\b/,
     /\b(jabatan|posisi|role|divisi|departemen|bagian)\b/,
     /\b(siapa\s+aja|siapa\s+saja|ada\s+siapa|list\s+orang|daftar\s+orang)\b/,
+    /\b(berapa\s+orang|jumlah\s+(orang|tim|anggota|staff))\b/,
+    /\b(daftar|list|sebutin|sebutkan)\b/,
+    /\b(orang\s*nya|personel|personnel|sdm|hr)\b/,
+    /\b(bd|digital\s+media|rnd|r&d|mdp)\b/i,
   ];
   return patterns.some((p) => p.test(lower));
 }
@@ -677,12 +680,15 @@ function detectMeetingIntent(message: string): boolean {
   const lower = message.toLowerCase();
   const patterns = [
     /\b(meeting|rapat|pertemuan|diskusi|briefing|sync|standup|weekly|monthly)\b/,
-    /\b(agenda|jadwal\s+(rapat|meeting)|notulen|minutes|resume\s+(rapat|meeting))\b/,
+    /\b(agenda|jadwal|notulen|minutes|resume\s+(rapat|meeting)|schedule)\b/,
     /\b(besok\s+(jam|pukul|pagi|siang|sore)|hari\s+ini\s+jam|nanti\s+jam)\b/,
     /\b(ketemu|meet|conference|zoom|gmeet|teams)\b/,
     /\b(undang|invite|ajak\s+\w+\s+ke\s+(meeting|rapat))\b/,
     /\b(keputusan\s+(dari|hasil)\s+(rapat|meeting))\b/,
     /\b(follow.?up|tindak\s+lanjut)\b/,
+    /\b(tanggal|tgl|kapan|jam\s+berapa|waktu(nya)?|pukul\s+berapa)\b/,
+    /\b(cek\s+fisik|site\s+visit|kunjungan|inspeksi)\b/,
+    /\b(ingetin|ingatkan|reminder|remind)\b/,
   ];
   return patterns.some((p) => p.test(lower));
 }
@@ -746,71 +752,56 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
   const isAction = detectActionItemIntent(message);
   const isPersona = detectPersonaIntent(message);
 
+  const catLabels: Record<string, string> = { team: "Tim BD", direksi: "Direksi 5 PT", management: "Management/Atasan", family: "Keluarga", external: "Eksternal" };
+
   const members = await getTeamMembers("active");
   if ((isTeam || isOwner) && members.length > 0) {
-    if (isTeam || isPersona) {
-      context += `\n\n---\nNODE_TEAM — Orang-orang yang dikenal DR:\n`;
-      const grouped: Record<string, typeof members> = {};
-      for (const m of members) {
-        const cat = m.category || "team";
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(m);
-      }
-      const catLabels: Record<string, string> = { team: "Tim BD", direksi: "Direksi 5 PT", management: "Management/Atasan", family: "Keluarga", external: "Eksternal" };
-      const showPersonaDetail = isPersona || isTeam;
-      for (const [cat, catMembers] of Object.entries(grouped)) {
-        context += `\n**${catLabels[cat] || cat}:**\n`;
-        for (const m of catMembers) {
-          context += `- **${m.name}**`;
-          if (m.aliases) context += ` (alias: ${m.aliases})`;
-          if (m.position) context += ` — ${m.position}`;
-          const details: string[] = [];
-          if (showPersonaDetail) {
-            if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
-            if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
-            if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
-            if (m.work_style) details.push(`Gaya kerja: ${m.work_style}`);
-            if (m.communication_style) details.push(`Gaya komunikasi: ${m.communication_style}`);
-            if (m.triggers) details.push(`Trigger/sensitif: ${m.triggers}`);
-            if (m.commitments) details.push(`Komitmen: ${m.commitments}`);
-            if (m.personality_notes) details.push(`Karakter: ${m.personality_notes}`);
-          }
-          if (details.length > 0) context += ` | ${details.join("; ")}`;
-          context += `\n`;
-        }
-      }
-
-      if (isPersona) {
-        const membersWithPersona = members.filter(m => m.work_style || m.communication_style || m.triggers || m.commitments || m.personality_notes);
-        const membersWithoutPersona = members.filter(m => !m.work_style && !m.communication_style && !m.triggers && !m.commitments && !m.personality_notes);
-        context += `\nPERSONA PROFILING AKTIF — ${membersWithPersona.length} punya profil, ${membersWithoutPersona.length} belum. Tangkap data persona dari obrolan natural.`;
-      }
-    } else {
-      const grouped: Record<string, string[]> = {};
-      for (const m of members) {
-        const cat = m.category || "team";
-        if (!grouped[cat]) grouped[cat] = [];
-        let entry = m.name;
-        if (m.aliases) entry += ` (${m.aliases})`;
-        if (m.position) entry += ` — ${m.position}`;
-        grouped[cat].push(entry);
-      }
-      const catLabels: Record<string, string> = { team: "Tim BD", direksi: "Direksi 5 PT", management: "Management/Atasan", family: "Keluarga", external: "Eksternal" };
-      let teamList = "";
-      for (const [cat, entries] of Object.entries(grouped)) {
-        teamList += `[${catLabels[cat] || cat}] ${entries.join("; ")}. `;
-      }
-      context += `\n\n---\nNODE_TEAM (compact): DARVIS kenal ${members.length} orang. ${teamList.trim()} Kalau DR sebut nama ini, lanjut natural. Kalau nama baru, tanya "Siapa [nama]?" sekali.`;
+    const showDetail = isTeam || isPersona || isOwner;
+    context += `\n\n---\nNODE_TEAM — DAFTAR LENGKAP orang yang dikenal DR (TOTAL: ${members.length} orang):\n⚠️ FAKTA DATABASE: Data di bawah ini WAJIB jadi acuan. DILARANG mengarang nama/posisi/jumlah yang tidak ada di daftar ini.\n`;
+    const grouped: Record<string, typeof members> = {};
+    for (const m of members) {
+      const cat = m.category || "team";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(m);
     }
+    for (const [cat, catMembers] of Object.entries(grouped)) {
+      context += `\n**${catLabels[cat] || cat} (${catMembers.length} orang):**\n`;
+      for (const m of catMembers) {
+        context += `- **${m.name}**`;
+        if (m.aliases) context += ` (alias: ${m.aliases})`;
+        if (m.position) context += ` — ${m.position}`;
+        if (showDetail && (isTeam || isPersona)) {
+          const details: string[] = [];
+          if (m.strengths) details.push(`Kelebihan: ${m.strengths}`);
+          if (m.weaknesses) details.push(`Kelemahan: ${m.weaknesses}`);
+          if (m.responsibilities) details.push(`Tanggung jawab: ${m.responsibilities}`);
+          if (m.work_style) details.push(`Gaya kerja: ${m.work_style}`);
+          if (m.communication_style) details.push(`Gaya komunikasi: ${m.communication_style}`);
+          if (m.triggers) details.push(`Trigger/sensitif: ${m.triggers}`);
+          if (m.commitments) details.push(`Komitmen: ${m.commitments}`);
+          if (m.personality_notes) details.push(`Karakter: ${m.personality_notes}`);
+          if (details.length > 0) context += ` | ${details.join("; ")}`;
+        }
+        context += `\n`;
+      }
+    }
+
+    if (isPersona) {
+      const membersWithPersona = members.filter(m => m.work_style || m.communication_style || m.triggers || m.commitments || m.personality_notes);
+      const membersWithoutPersona = members.filter(m => !m.work_style && !m.communication_style && !m.triggers && !m.commitments && !m.personality_notes);
+      context += `\nPERSONA PROFILING AKTIF — ${membersWithPersona.length} punya profil, ${membersWithoutPersona.length} belum. Tangkap data persona dari obrolan natural.`;
+    }
+    context += `\nKalau DR sebut nama yang ada di daftar, lanjut natural. Kalau nama baru, tanya "Siapa [nama]?" sekali.`;
   }
 
-  if (isMeeting) {
-    const upcoming = await getUpcomingMeetings();
-    const today = await getTodayMeetings();
-    if (upcoming.length > 0 || today.length > 0) {
-      context += `\n\n---\nNODE_MEETING — Jadwal Meeting:\n`;
+  if (isMeeting || isOwner) {
+    const allMeetings = await getMeetings();
+    if (allMeetings.length > 0) {
+      const today = await getTodayMeetings();
+      const upcoming = await getUpcomingMeetings();
+      context += `\n\n---\nNODE_MEETING — SEMUA Jadwal Meeting yang tercatat (TOTAL: ${allMeetings.length}):\n⚠️ FAKTA DATABASE: Tanggal/waktu di bawah ini adalah DATA PASTI. DILARANG mengarang tanggal yang tidak ada di sini.\n`;
       if (today.length > 0) {
-        context += `Hari ini:\n`;
+        context += `\n**Hari ini:**\n`;
         for (const m of today) {
           context += `- ${m.title} (${m.date_time || "waktu belum ditentukan"})`;
           if (m.participants) context += ` — Peserta: ${m.participants}`;
@@ -820,18 +811,28 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
       }
       const futureOnly = upcoming.filter(m => !today.find(t => t.id === m.id));
       if (futureOnly.length > 0) {
-        context += `Mendatang:\n`;
-        for (const m of futureOnly.slice(0, 5)) {
+        context += `\n**Mendatang:**\n`;
+        for (const m of futureOnly.slice(0, 10)) {
           context += `- ${m.title} (${m.date_time || "waktu belum ditentukan"})`;
+          if (m.participants) context += ` — Peserta: ${m.participants}`;
+          if (m.agenda) context += ` — Agenda: ${m.agenda}`;
+          context += `\n`;
+        }
+      }
+      const pastMeetings = allMeetings.filter(m => !today.find(t => t.id === m.id) && !upcoming.find(u => u.id === m.id));
+      if (pastMeetings.length > 0) {
+        context += `\n**Sudah lewat/lainnya (${pastMeetings.length}):**\n`;
+        for (const m of pastMeetings.slice(0, 10)) {
+          context += `- ${m.title} (${m.date_time || "waktu tidak ditentukan"})`;
           if (m.participants) context += ` — Peserta: ${m.participants}`;
           context += `\n`;
         }
       }
-      context += `Gunakan data meeting untuk memberikan reminder atau persiapan yang relevan.`;
+      context += `Gunakan data meeting ini untuk menjawab pertanyaan tanggal/jadwal. JANGAN mengarang tanggal.`;
     }
   }
 
-  if (isProject) {
+  if (isProject || isOwner) {
     const projects = await getProjects("active");
     if (projects.length > 0) {
       context += `\n\n---\nNODE_PROJECTS — Project Aktif:\n`;
@@ -849,21 +850,22 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
     }
   }
 
-  if (isAction || isTeam || isMeeting || isProject) {
+  if (isAction || isOwner || isTeam || isMeeting || isProject) {
     const overdue = await getOverdueActionItems();
     const pending = await getPendingActionItems();
     if (overdue.length > 0) {
       context += `\n\n---\nACTION ITEMS OVERDUE (${overdue.length}):\n`;
-      for (const a of overdue.slice(0, 5)) {
+      for (const a of overdue.slice(0, 8)) {
         context += `- ${a.title}`;
         if (a.assignee) context += ` → ${a.assignee}`;
         if (a.deadline) context += ` (deadline: ${a.deadline})`;
         context += ` [${a.priority}]\n`;
       }
       context += `Ingatkan mas DR tentang item overdue secara natural jika relevan.`;
-    } else if (pending.length > 0 && isAction) {
+    }
+    if (pending.length > 0 && (isAction || isOwner)) {
       context += `\n\n---\nACTION ITEMS PENDING (${pending.length}):\n`;
-      for (const a of pending.slice(0, 5)) {
+      for (const a of pending.slice(0, 8)) {
         context += `- ${a.title}`;
         if (a.assignee) context += ` → ${a.assignee}`;
         if (a.deadline) context += ` (deadline: ${a.deadline})`;
@@ -2128,6 +2130,7 @@ GAYA NGOBROL:
         const secretaryCtx = await buildSecretaryContext(message, isOwner);
         if (secretaryCtx) {
           systemContent += secretaryCtx;
+          systemContent += `\n\n---\n⚠️ ATURAN WAJIB DATA SECRETARY:\n1. Semua data NODE_TEAM, NODE_MEETING, ACTION ITEMS di atas adalah FAKTA dari database. WAJIB gunakan sebagai acuan utama.\n2. DILARANG KERAS mengarang nama orang, tanggal, posisi, atau jumlah yang TIDAK ADA di data di atas.\n3. Kalau ditanya jumlah tim/anggota, HITUNG dari daftar NODE_TEAM. Kalau ditanya tanggal meeting, AMBIL dari NODE_MEETING.\n4. Kalau data yang ditanya TIDAK ADA di database, jawab jujur: "Gw belum punya data itu. Mau gw catet?"\n5. JANGAN PERNAH bilang "cek di dashboard" kalau lo sudah punya datanya di atas — langsung jawab dari data.`;
         }
       }
 
@@ -2263,8 +2266,9 @@ GAYA NGOBROL:
 
         const rawEnrichments = await getProfileEnrichments(userId);
         const contributorEnrichments = await getProfileEnrichments("contributor_shared");
-        const combinedEnrichments = [...rawEnrichments, ...contributorEnrichments];
-        const profileEnrichments = applyMemoryGovernor(combinedEnrichments, 5);
+        const ownerEnrichments = applyMemoryGovernor(rawEnrichments, 10);
+        const contribEnrichments = applyMemoryGovernor(contributorEnrichments, 8);
+        const profileEnrichments = [...ownerEnrichments, ...contribEnrichments];
         if (profileEnrichments.length > 0) {
           const grouped: Record<string, string[]> = {};
           for (const e of profileEnrichments) {
