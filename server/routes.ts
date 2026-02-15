@@ -777,7 +777,15 @@ function buildSecretaryContext(message: string, isOwner: boolean = false): strin
           context += `\n`;
         }
       }
-      context += `\nKalau DR sebut nama yang TIDAK ada di daftar ini, TANYA siapa orang itu. Kalau sudah ada (termasuk alias), langsung lanjut natural.\n`;
+      const allNames = members.flatMap(m => {
+        const names = [m.name];
+        if (m.aliases) names.push(...m.aliases.split(",").map(a => a.trim()).filter(Boolean));
+        return names;
+      });
+      context += `\nDARVIS SUDAH KENAL ${members.length} orang (${allNames.join(", ")}). RULES KETAT:`;
+      context += `\n1. Kalau DR sebut nama yang ADA di daftar ini (termasuk alias), JANGAN tanya lagi siapa dia. Langsung lanjut natural pakai info yang sudah ada.`;
+      context += `\n2. Kalau DR sebut nama BARU yang BELUM ada di daftar, tanya "Siapa [nama]?" SEKALI SAJA, lalu simpan jawabannya.`;
+      context += `\n3. JANGAN PERNAH tanya ulang soal orang yang sudah pernah dibahas/disimpan sebelumnya — ini SANGAT menjengkelkan user.\n`;
 
       if (isPersona) {
         const membersWithPersona = members.filter(m => m.work_style || m.communication_style || m.triggers || m.commitments || m.personality_notes);
@@ -2997,17 +3005,22 @@ Respond ONLY with valid JSON, no other text.`;
     }));
 
     if (Array.isArray(parsed.team_members) && parsed.team_members.length > 0) {
-      for (const member of parsed.team_members.slice(0, 5)) {
-        if (member.name && typeof member.name === "string") {
-          const existingByAlias = getTeamMemberByNameOrAlias(member.name);
+      const appendIfNew = (existing: string | null, newVal: string | null): string | null => {
+        if (!newVal) return existing;
+        if (!existing) return newVal;
+        if (existing.toLowerCase().includes(newVal.toLowerCase())) return existing;
+        return `${existing}; ${newVal}`;
+      };
+      for (const member of parsed.team_members.slice(0, 10)) {
+        try {
+          if (!member.name || typeof member.name !== "string" || member.name.trim().length < 2) {
+            console.log(`Secretary: skipping invalid member name: ${JSON.stringify(member.name)}`);
+            continue;
+          }
+          const memberName = member.name.trim();
+          const existingByAlias = getTeamMemberByNameOrAlias(memberName);
           if (existingByAlias) {
-            const appendIfNew = (existing: string | null, newVal: string | null): string | null => {
-              if (!newVal) return existing;
-              if (!existing) return newVal;
-              if (existing.toLowerCase().includes(newVal.toLowerCase())) return existing;
-              return `${existing}; ${newVal}`;
-            };
-            upsertTeamMember({
+            const resultId = upsertTeamMember({
               name: existingByAlias.name,
               position: member.position || existingByAlias.position || null,
               strengths: member.strengths || existingByAlias.strengths || null,
@@ -3022,11 +3035,12 @@ Respond ONLY with valid JSON, no other text.`;
               commitments: appendIfNew(existingByAlias.commitments, member.commitments),
               personality_notes: appendIfNew(existingByAlias.personality_notes, member.personality_notes),
             });
+            const verify = getTeamMemberByNameOrAlias(existingByAlias.name);
             const personaUpdated = member.work_style || member.communication_style || member.triggers || member.commitments || member.personality_notes;
-            console.log(`Secretary: updated existing member "${existingByAlias.name}" (matched from "${member.name}")${personaUpdated ? " [+persona]" : ""}`);
+            console.log(`Secretary: updated "${existingByAlias.name}" (id=${resultId}, matched from "${memberName}")${personaUpdated ? " [+persona]" : ""} — DB verify: ${verify ? "OK" : "FAILED"}`);
           } else {
-            upsertTeamMember({
-              name: member.name,
+            const resultId = upsertTeamMember({
+              name: memberName,
               position: member.position || null,
               strengths: member.strengths || null,
               weaknesses: member.weaknesses || null,
@@ -3040,9 +3054,15 @@ Respond ONLY with valid JSON, no other text.`;
               commitments: member.commitments || null,
               personality_notes: member.personality_notes || null,
             });
+            const verify = getTeamMemberByNameOrAlias(memberName);
             const personaAdded = member.work_style || member.communication_style || member.triggers || member.commitments || member.personality_notes;
-            console.log(`Secretary: added new person "${member.name}" [${member.category || "external"}]${personaAdded ? " [+persona]" : ""}`);
+            console.log(`Secretary: ADDED NEW "${memberName}" (id=${resultId}) [${member.category || "external"}]${personaAdded ? " [+persona]" : ""} — DB verify: ${verify ? "OK (id=" + verify.id + ")" : "FAILED — DATA NOT SAVED!"}`);
+            if (!verify) {
+              console.error(`Secretary CRITICAL: upsertTeamMember returned id=${resultId} but verification query found nothing for "${memberName}". Raw data: ${JSON.stringify(member)}`);
+            }
           }
+        } catch (memberErr: any) {
+          console.error(`Secretary: FAILED to save team member "${member.name}":`, memberErr?.message || memberErr);
         }
       }
     }
@@ -3140,6 +3160,7 @@ Respond ONLY with valid JSON, no other text.`;
       console.log(`Secretary extraction complete: ${totalExtracted} items extracted`);
     }
   } catch (err: any) {
-    console.error("Secretary extraction failed:", err?.message || err);
+    console.error("Secretary extraction FAILED:", err?.message || err);
+    if (err?.stack) console.error("Secretary extraction stack:", err.stack.split("\n").slice(0, 5).join("\n"));
   }
 }
