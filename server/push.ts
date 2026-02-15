@@ -19,7 +19,7 @@ export function getVapidPublicKey(): string {
 export async function sendPushToAll(title: string, body: string) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
 
-  const subscriptions = getAllPushSubscriptions();
+  const subscriptions = await getAllPushSubscriptions();
   if (subscriptions.length === 0) return;
 
   const payload = JSON.stringify({ title, body, icon: "/darvis-logo.png" });
@@ -38,7 +38,7 @@ export async function sendPushToAll(title: string, body: string) {
       );
     } catch (err: any) {
       if (err?.statusCode === 410 || err?.statusCode === 404) {
-        removePushSubscription(sub.endpoint);
+        await removePushSubscription(sub.endpoint);
       }
     }
   }
