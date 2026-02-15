@@ -2346,7 +2346,7 @@ GAYA NGOBROL:
       const isHeavyContext = nodesUsed.length >= 2 || wantsDetail || contextMode !== "general" || isStrategicEscalation;
       const hasHeavyNode = nodesUsed.some(n => ["NODE_BIAS", "NODE_RISK_GUARD", "NODE_NM", "NODE_COMPLIANCE"].includes(n));
       const needsGPT5 = wantsDetail || isHeavyContext || hasHeavyNode || isMultiPersonaMode || isDecisionFast || hasImages || (isContributor && !!req.session.contributorTeamMemberId) || contextMode !== "general" || msgWordCount > 50 || /\b(analisis|strategi|keputusan|evaluasi|review|rencana|plan|gimana\s+menurut|gimana\s+cara|apa\s+pendapat|bantu\s+gw)\b/i.test(message);
-      const selectedModel = needsGPT5 ? "gpt-5" : "gpt-4o-mini";
+      const selectedModel = needsGPT5 ? "gpt-5" : "gpt-4o";
       const reasoningEffort = needsGPT5 ? (wantsDetail ? "medium" : "low") : undefined;
       const maxTokens = wantsDetail ? 2048 : (voiceMode ? 512 : (needsGPT5 ? 1024 : 768));
       console.log(`[PROMPT] model: ${selectedModel}, size: ~${systemTokenEstimate}tok, nodes: [${nodesUsed.join(", ")}], voice: ${voiceMode}, msgWords: ${msgWordCount}, reasoning: ${reasoningEffort || "n/a"}, maxTok: ${maxTokens}`);
