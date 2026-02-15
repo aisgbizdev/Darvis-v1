@@ -909,7 +909,7 @@ Respond ONLY with valid JSON array.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
@@ -975,7 +975,7 @@ Respond ONLY with valid JSON array.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 1024,
     });
@@ -2330,7 +2330,7 @@ GAYA NGOBROL:
       const isHeavyContext = nodesUsed.length >= 2 || wantsDetail || contextMode !== "general" || isStrategicEscalation;
       const hasHeavyNode = nodesUsed.some(n => ["NODE_BIAS", "NODE_RISK_GUARD", "NODE_NM", "NODE_COMPLIANCE"].includes(n));
       const needsGPT5 = wantsDetail || isHeavyContext || hasHeavyNode || isMultiPersonaMode || isDecisionFast || hasImages || (isContributor && !!req.session.contributorTeamMemberId) || contextMode !== "general" || msgWordCount > 50 || /\b(analisis|strategi|keputusan|evaluasi|review|rencana|plan|gimana\s+menurut|gimana\s+cara|apa\s+pendapat|bantu\s+gw)\b/i.test(message);
-      const selectedModel = needsGPT5 ? "gpt-5" : "gpt-4o-mini";
+      const selectedModel = needsGPT5 ? "gpt-5" : "gpt-4o";
       const reasoningEffort = needsGPT5 ? (wantsDetail ? "medium" : "low") : undefined;
       const maxTokens = wantsDetail ? 2048 : (voiceMode ? 512 : (needsGPT5 ? 1024 : 768));
       console.log(`[PROMPT] model: ${selectedModel}, size: ~${systemTokenEstimate}tok, nodes: [${nodesUsed.join(", ")}], voice: ${voiceMode}, msgWords: ${msgWordCount}, reasoning: ${reasoningEffort || "n/a"}, maxTok: ${maxTokens}`);
@@ -2594,7 +2594,7 @@ GAYA NGOBROL:
           errorMsg = "Koneksi terputus. Coba lagi ya.";
         }
 
-        console.error("Stream error:", isQuota ? "QUOTA_EXCEEDED" : isTimeout ? "TIMEOUT" : errMessage);
+        console.error("Stream error:", isQuota ? "QUOTA_EXCEEDED" : isTimeout ? "TIMEOUT" : errMessage, "| status:", statusCode, "| full:", JSON.stringify({ message: errMessage, status: statusCode, type: streamErr?.type, code: streamErr?.code }));
         if (!res.headersSent) {
           return res.status(isQuota ? 429 : 500).json({ message: errorMsg });
         }
@@ -2657,7 +2657,7 @@ Respond ONLY with valid JSON array, no other text.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
@@ -2711,7 +2711,7 @@ async function generateSummary(userId: string) {
     : `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nPercakapan:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) dari percakapan ini. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-4o",
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 2048,
   });
@@ -2766,7 +2766,7 @@ Jawab HANYA dalam format JSON (tanpa markdown):
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 256,
     });
@@ -2807,7 +2807,7 @@ async function generateRoomSummary(roomId: number, userId: string) {
     : `Kamu adalah DARVIS, asisten berpikir untuk mas DR.\n\nPercakapan:\n${conversationText}\n\nBuatkan ringkasan singkat (max 300 kata) dari percakapan ini. Fokus pada: topik yang dibahas, keputusan penting, konteks emosional, dan insight yang muncul. Tulis dalam bahasa Indonesia.`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-4o",
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 2048,
   });
@@ -2861,7 +2861,7 @@ RULES:
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 1024,
     });
@@ -2994,7 +2994,7 @@ Respond ONLY with valid JSON, no other text.`;
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 2048,
     });
