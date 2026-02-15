@@ -29,6 +29,7 @@ export const profile_enrichments = pgTable("profile_enrichments", {
   fact: text("fact").notNull(),
   confidence: doublePrecision("confidence").notNull().default(0.8),
   source_quote: text("source_quote"),
+  contributor_name: text("contributor_name"),
   created_at: text("created_at").notNull().default(sql`now()::text`),
 });
 
@@ -223,6 +224,7 @@ export interface ProfileEnrichmentItem {
   fact: string;
   confidence: number;
   source_quote: string | null;
+  contributor_name: string | null;
   created_at: string;
 }
 

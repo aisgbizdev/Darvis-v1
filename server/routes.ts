@@ -23,6 +23,7 @@ import {
   clearPersonaFeedback,
   getProfileEnrichments,
   bulkSaveProfileEnrichments,
+  deleteProfileEnrichment,
   seedDRProfileForUser,
   saveConversationTag,
   getConversationTags,
@@ -877,7 +878,7 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
   return context;
 }
 
-async function extractProfileEnrichment(userId: string, userMessage: string, isContributorMode = false) {
+async function extractProfileEnrichment(userId: string, userMessage: string, isContributorMode = false, contributorName?: string) {
   const contributorPrompt = `Kamu adalah sistem ekstraksi profil untuk DARVIS. Pesan ini datang dari KONTRIBUTOR — seseorang yang mengenal DR (Dian Ramadhan) secara pribadi. Karena kontributor pasti kenal DR, semua yang mereka sampaikan memiliki akurasi tinggi.
 
 Pesan kontributor: "${userMessage}"
@@ -956,8 +957,8 @@ Respond ONLY with valid JSON array.`;
       }));
 
     if (validItems.length > 0) {
-      await bulkSaveProfileEnrichments(userId, validItems);
-      console.log(`Profile enrichment: captured ${validItems.length} fact(s) about DR`);
+      await bulkSaveProfileEnrichments(userId, validItems, isContributorMode ? contributorName : null);
+      console.log(`Profile enrichment: captured ${validItems.length} fact(s) about DR${contributorName ? ` from ${contributorName}` : ''}`);
     }
   } catch (err: any) {
     console.error("Profile enrichment extraction failed:", err?.message || err);
@@ -1193,6 +1194,21 @@ export async function registerRoutes(
       return res.json({ enrichments });
     } catch (err: any) {
       console.error("Contributor enrichments API error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/contributor-enrichments/:id", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) {
+        return res.status(403).json({ message: "Owner only" });
+      }
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await deleteProfileEnrichment(id);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Delete contributor enrichment error:", err?.message || err);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -2543,7 +2559,8 @@ GAYA NGOBROL:
         }
 
         if (isContributor) {
-          extractProfileEnrichment("contributor_shared", message, true).catch((err) => {
+          const contribDisplayName = req.session.contributorTeamMemberName || "Anonim";
+          extractProfileEnrichment("contributor_shared", message, true, contribDisplayName).catch((err) => {
             console.error("Contributor enrichment error:", err?.message || err);
           });
           const contribTeamId = req.session.contributorTeamMemberId;

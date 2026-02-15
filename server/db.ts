@@ -214,6 +214,7 @@ export async function initDatabase() {
     `ALTER TABLE team_members ADD COLUMN IF NOT EXISTS commitments TEXT`,
     `ALTER TABLE team_members ADD COLUMN IF NOT EXISTS personality_notes TEXT`,
     `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS room_id INTEGER`,
+    `ALTER TABLE profile_enrichments ADD COLUMN IF NOT EXISTS contributor_name TEXT`,
   ];
 
   for (const migration of migrations) {
@@ -451,6 +452,7 @@ export interface ProfileEnrichment {
   fact: string;
   confidence: number;
   source_quote: string | null;
+  contributor_name: string | null;
   created_at: string;
 }
 
@@ -468,7 +470,8 @@ export async function saveProfileEnrichment(
   fact: string,
   confidence: number,
   sourceQuote: string | null,
-  client?: any
+  client?: any,
+  contributorName?: string | null
 ) {
   const q = client || pool;
   const existingResult = await q.query(
@@ -484,21 +487,22 @@ export async function saveProfileEnrichment(
     );
   } else {
     await q.query(
-      `INSERT INTO profile_enrichments (user_id, category, fact, confidence, source_quote) VALUES ($1, $2, $3, $4, $5)`,
-      [userId, category, fact, confidence, sourceQuote]
+      `INSERT INTO profile_enrichments (user_id, category, fact, confidence, source_quote, contributor_name) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, category, fact, confidence, sourceQuote, contributorName || null]
     );
   }
 }
 
 export async function bulkSaveProfileEnrichments(
   userId: string,
-  items: { category: string; fact: string; confidence: number; source_quote: string | null }[]
+  items: { category: string; fact: string; confidence: number; source_quote: string | null }[],
+  contributorName?: string | null
 ) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const item of items) {
-      await saveProfileEnrichment(userId, item.category, item.fact, item.confidence, item.source_quote, client);
+      await saveProfileEnrichment(userId, item.category, item.fact, item.confidence, item.source_quote, client, contributorName);
     }
     await client.query('COMMIT');
   } catch (e) {
@@ -507,6 +511,10 @@ export async function bulkSaveProfileEnrichments(
   } finally {
     client.release();
   }
+}
+
+export async function deleteProfileEnrichment(id: number) {
+  await pool.query(`DELETE FROM profile_enrichments WHERE id = $1`, [id]);
 }
 
 export async function clearProfileEnrichments(userId: string) {

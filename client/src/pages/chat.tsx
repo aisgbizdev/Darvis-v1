@@ -1450,9 +1450,27 @@ export default function ChatPage() {
                         {ENRICHMENT_LABELS[category] || category}
                       </p>
                       {items.map((item) => (
-                        <div key={item.id} className="flex items-start gap-2 py-0.5" data-testid={`contributor-enrichment-item-${item.id}`}>
+                        <div key={item.id} className="flex items-start gap-1.5 py-0.5 group/contrib" data-testid={`contributor-enrichment-item-${item.id}`}>
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-400/60 mt-1.5 shrink-0" />
-                          <p className="text-[13px] sm:text-xs leading-relaxed">{item.fact}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] sm:text-xs leading-relaxed">{item.fact}</p>
+                            {item.contributor_name && (
+                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">— {item.contributor_name}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (confirm("Hapus insight ini?")) {
+                                apiRequest("DELETE", `/api/contributor-enrichments/${item.id}`).then(() => {
+                                  queryClient.invalidateQueries({ queryKey: ["/api/contributor-enrichments"] });
+                                }).catch(() => {});
+                              }
+                            }}
+                            className="invisible group-hover/contrib:visible shrink-0 p-0.5 rounded text-muted-foreground/50 hover:text-destructive transition-colors"
+                            data-testid={`button-delete-contributor-enrichment-${item.id}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
                       ))}
                     </div>
