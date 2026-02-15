@@ -666,6 +666,9 @@ function detectTeamIntent(message: string): boolean {
     /\b(andi|sari|budi|dina|rudi|fajar|dewi|agus|rina|hendra)\b/i,
     /\b(strengths|kelemahan|kelebihan|kekurangan|potensi)\b/,
     /\b(leadership|kepemimpinan|coaching|mentoring|bimbingan)\b/,
+    /\b(sekretaris|direktur|manajer|manager|head|kepala|koordinator|admin\s+officer)\b/,
+    /\b(jabatan|posisi|role|divisi|departemen|bagian)\b/,
+    /\b(siapa\s+aja|siapa\s+saja|ada\s+siapa|list\s+orang|daftar\s+orang)\b/,
   ];
   return patterns.some((p) => p.test(lower));
 }
@@ -783,12 +786,21 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
         context += `\nPERSONA PROFILING AKTIF — ${membersWithPersona.length} punya profil, ${membersWithoutPersona.length} belum. Tangkap data persona dari obrolan natural.`;
       }
     } else {
-      const allNames = members.flatMap(m => {
-        const names = [m.name];
-        if (m.aliases) names.push(...m.aliases.split(",").map(a => a.trim()).filter(Boolean));
-        return names;
-      });
-      context += `\n\n---\nNODE_TEAM (compact): DARVIS kenal ${members.length} orang: ${allNames.join(", ")}. Kalau DR sebut nama ini, lanjut natural. Kalau nama baru, tanya "Siapa [nama]?" sekali.`;
+      const grouped: Record<string, string[]> = {};
+      for (const m of members) {
+        const cat = m.category || "team";
+        if (!grouped[cat]) grouped[cat] = [];
+        let entry = m.name;
+        if (m.aliases) entry += ` (${m.aliases})`;
+        if (m.position) entry += ` — ${m.position}`;
+        grouped[cat].push(entry);
+      }
+      const catLabels: Record<string, string> = { team: "Tim BD", direksi: "Direksi 5 PT", management: "Management/Atasan", family: "Keluarga", external: "Eksternal" };
+      let teamList = "";
+      for (const [cat, entries] of Object.entries(grouped)) {
+        teamList += `[${catLabels[cat] || cat}] ${entries.join("; ")}. `;
+      }
+      context += `\n\n---\nNODE_TEAM (compact): DARVIS kenal ${members.length} orang. ${teamList.trim()} Kalau DR sebut nama ini, lanjut natural. Kalau nama baru, tanya "Siapa [nama]?" sekali.`;
     }
   }
 
