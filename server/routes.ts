@@ -88,6 +88,10 @@ import { getWIBDateString, getWIBTimeString, getWIBDayName, parseWIBTimestamp } 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const geminiApiKey = process.env.GEMINI_API_KEY;
 const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
+const ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
+const ollamaModel = process.env.OLLAMA_MODEL || "llama3";
+const ollamaTimeoutMs = parseInt(process.env.OLLAMA_TIMEOUT_MS || "120000", 10);
+const ollamaClient = ollamaBaseUrl ? new OpenAI({ baseURL: `${ollamaBaseUrl}/v1`, apiKey: "ollama" }) : null;
 
 const ENRICHMENT_CATEGORY_LABELS: Record<string, string> = {
   persepsi_orang: "Persepsi Orang Lain",
@@ -2445,6 +2449,7 @@ GAYA NGOBROL:
         let stream: any;
         let actualModel = selectedModel;
         let useGeminiFallback = false;
+        let useOllamaFallback = false;
 
         const isQuotaError = (err: any): boolean => {
           const s = err?.status || err?.statusCode;
@@ -2480,9 +2485,16 @@ GAYA NGOBROL:
               try {
                 stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
               } catch (err3: any) {
-                if (genAI && isQuotaError(err3)) {
-                  useGeminiFallback = true;
-                  console.log(`[GEMINI_FALLBACK] All OpenAI models failed, switching to Gemini`);
+                if (isQuotaError(err3)) {
+                  if (genAI) {
+                    useGeminiFallback = true;
+                    console.log(`[GEMINI_FALLBACK] All OpenAI models failed, switching to Gemini`);
+                  } else if (ollamaClient) {
+                    useOllamaFallback = true;
+                    console.log(`[OLLAMA_FALLBACK] All OpenAI models failed, no Gemini, switching to Ollama`);
+                  } else {
+                    throw err3;
+                  }
                 } else {
                   throw err3;
                 }
@@ -2497,16 +2509,30 @@ GAYA NGOBROL:
             try {
               stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
             } catch (err2: any) {
-              if (genAI && isQuotaError(err2)) {
-                useGeminiFallback = true;
-                console.log(`[GEMINI_FALLBACK] All OpenAI models failed, switching to Gemini`);
+              if (isQuotaError(err2)) {
+                if (genAI) {
+                  useGeminiFallback = true;
+                  console.log(`[GEMINI_FALLBACK] All OpenAI models failed, switching to Gemini`);
+                } else if (ollamaClient) {
+                  useOllamaFallback = true;
+                  console.log(`[OLLAMA_FALLBACK] All OpenAI models failed, no Gemini, switching to Ollama`);
+                } else {
+                  throw err2;
+                }
               } else {
                 throw err2;
               }
             }
-          } else if (genAI && isQuotaError(initialErr)) {
-            useGeminiFallback = true;
-            console.log(`[GEMINI_FALLBACK] OpenAI quota exhausted, switching to Gemini`);
+          } else if (isQuotaError(initialErr)) {
+            if (genAI) {
+              useGeminiFallback = true;
+              console.log(`[GEMINI_FALLBACK] OpenAI quota exhausted, switching to Gemini`);
+            } else if (ollamaClient) {
+              useOllamaFallback = true;
+              console.log(`[OLLAMA_FALLBACK] OpenAI quota exhausted, no Gemini, switching to Ollama`);
+            } else {
+              throw initialErr;
+            }
           } else {
             throw initialErr;
           }
@@ -2573,9 +2599,47 @@ GAYA NGOBROL:
             }
           } catch (geminiErr: any) {
             console.error("[GEMINI_ERROR]", geminiErr?.message || geminiErr);
-            throw new Error(`Gemini fallback juga gagal: ${geminiErr?.message || "Unknown error"}`);
+            if (ollamaClient) {
+              useOllamaFallback = true;
+              useGeminiFallback = false;
+              fullReply = "";
+              console.log(`[OLLAMA_FALLBACK] Gemini also failed, switching to Ollama`);
+            } else {
+              throw new Error(`Semua AI provider gagal. OpenAI: kuota habis. Gemini: ${geminiErr?.message || "error"}`);
+            }
           }
-        } else {
+        }
+
+        if (useOllamaFallback && ollamaClient) {
+          actualModel = ollamaModel;
+          console.log(`[OLLAMA] Using model: ${ollamaModel} at ${ollamaBaseUrl}`);
+          const ollamaAbort = new AbortController();
+          const ollamaTimeout = setTimeout(() => ollamaAbort.abort(), ollamaTimeoutMs);
+
+          try {
+            const ollamaStream = await (ollamaClient.chat.completions.create as any)({
+              model: ollamaModel,
+              messages: apiMessages,
+              stream: true,
+            }, { signal: ollamaAbort.signal });
+
+            for await (const chunk of ollamaStream) {
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (delta) {
+                fullReply += delta;
+                res.write(`data: ${JSON.stringify({ type: "chunk", content: delta })}\n\n`);
+                if (typeof (res as any).flush === "function") {
+                  (res as any).flush();
+                }
+              }
+            }
+          } catch (ollamaErr: any) {
+            console.error("[OLLAMA_ERROR]", ollamaErr?.message || ollamaErr);
+            throw new Error(`Semua AI provider gagal. Ollama: ${ollamaErr?.message || "error"}`);
+          } finally {
+            clearTimeout(ollamaTimeout);
+          }
+        } else if (!useGeminiFallback) {
           if (actualModel !== selectedModel) {
             console.log(`[MODEL] Fallback: ${selectedModel} → ${actualModel}`);
           }
