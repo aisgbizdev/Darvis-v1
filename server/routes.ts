@@ -2982,10 +2982,10 @@ Ekstrak dalam format JSON dengan struktur:
     { "name": "string", "position": "string|null", "strengths": "string|null", "weaknesses": "string|null", "responsibilities": "string|null", "notes": "string|null", "aliases": "comma-separated aliases|null", "category": "team|direksi|family|external|management", "work_style": "string|null", "communication_style": "string|null", "triggers": "string|null", "commitments": "string|null", "personality_notes": "string|null" }
   ],
   "meetings": [
-    { "title": "string", "date_time": "YYYY-MM-DD HH:MM|null", "participants": "comma-separated names|null", "agenda": "string|null" }
+    { "title": "string", "date_time": "YYYY-MM-DD HH:MM|null", "participants": "comma-separated names|null", "agenda": "string|null", "notify": true }
   ],
   "action_items": [
-    { "title": "string", "assignee": "string|null", "deadline": "YYYY-MM-DD|null", "priority": "low|medium|high|urgent", "source": "conversation", "notes": "string|null" }
+    { "title": "string", "assignee": "string|null", "deadline": "YYYY-MM-DD|null", "priority": "low|medium|high|urgent", "source": "conversation", "notes": "string|null", "notify": false }
   ],
   "projects": [
     { "name": "string", "description": "string|null", "pic": "string|null", "status": "planning|active|on_hold|completed|cancelled", "milestones": "string|null", "deadline": "YYYY-MM-DD|null", "progress": 0, "notes": "string|null" }
@@ -3033,13 +3033,26 @@ ATURAN PENYIMPANAN:
    - deadline = null
 3. JANGAN pernah masukkan ke follow_ups jika ada keyword trigger di atas. Follow_ups HANYA untuk kalimat pasif tanpa keyword trigger yang TIDAK punya waktu spesifik.
 
+ATURAN NOTIFIKASI (PENTING — dicatat ≠ dinotifkan):
+- Field "notify" menentukan apakah item ini PERLU dikirim sebagai notifikasi ke HP user.
+- Set notify = true HANYA jika KEDUA syarat terpenuhi:
+  1. User EKSPLISIT minta diingatkan/dinotifkan (keyword: ingetin, ingatkan, jangan lupa, remind, tolong ingetin, sapa)
+  2. DAN ada tanggal/hari/jam SPESIFIK yang bisa di-trigger
+- Set notify = false untuk semua kasus lain, termasuk:
+  - "catat" / "noted" / "simpen" → HANYA dicatat, BUKAN dinotifkan
+  - Meeting/jadwal yang disebutkan tanpa minta diingatkan
+  - Action items tanpa waktu spesifik
+  - Info yang hanya perlu disimpan, bukan diingatkan
+
 CONTOH MAPPING:
-- "catet donk tgl 25 feb ada cek fisik" → meetings: { title: "Cek fisik", date_time: "2026-02-25 09:00" }
-- "ingetin gw jam 3 sore meeting" → meetings: { title: "Meeting", date_time: "${wibDateStr} 15:00" }
-- "catat: besok harus follow up client" → meetings: { title: "Follow up client", date_time: besok 09:00 }
-- "noted, tambahin ke list" → action_items: { title: deskripsi dari konteks }
-- "simpen info ini" → action_items: { title: deskripsi dari konteks }
-- "jangan lupa beli kado" → action_items: { title: "Beli kado" }
+- "ingetin gw jam 3 sore meeting" → meetings: { title: "Meeting", date_time: "${wibDateStr} 15:00", notify: true }
+- "jangan lupa besok jam 10 ada cek fisik" → meetings: { title: "Cek fisik", date_time: besok 10:00, notify: true }
+- "tolong ingetin hari jumat sapa pak Roy" → meetings: { title: "Sapa pak Roy", date_time: Jumat 09:00, notify: true }
+- "catet donk tgl 25 feb ada cek fisik" → meetings: { title: "Cek fisik", date_time: "2026-02-25 09:00", notify: false }
+- "catat: besok harus follow up client" → meetings: { title: "Follow up client", date_time: besok 09:00, notify: false }
+- "noted, tambahin ke list" → action_items: { title: deskripsi dari konteks, notify: false }
+- "simpen info ini" → action_items: { title: deskripsi dari konteks, notify: false }
+- "jangan lupa beli kado" → action_items: { title: "Beli kado", notify: false } (tidak ada waktu spesifik)
 
 PARSING TANGGAL RELATIF (WAJIB — basis WIB):
 - "hari ini" → ${wibDateStr}
@@ -3163,21 +3176,13 @@ Respond ONLY with valid JSON, no other text.`;
             date_time: dateTime,
             participants: meeting.participants || null,
             agenda: meeting.agenda || null,
+            notify: meeting.notify === true,
           });
-          console.log(`Secretary: created meeting "${meeting.title}" (id=${meetingId})`);
+          console.log(`Secretary: created meeting "${meeting.title}" (id=${meetingId}, notify=${!!meeting.notify})`);
 
-          try {
-            const scheduleInfo = dateTime ? ` — Jadwal: ${dateTime} WIB` : "";
-            await createNotification({
-              type: "meeting_reminder",
-              title: `Jadwal baru dicatat`,
-              message: `${meeting.title}${meeting.participants ? ` — Peserta: ${meeting.participants}` : ""}${scheduleInfo}`,
-              data: JSON.stringify({ meeting_id: meetingId }),
-            });
-            console.log(`Secretary: notification created for "${meeting.title}"`);
-          } catch (_notifErr) {}
+          const shouldNotify = meeting.notify === true;
 
-          if (dateTime) {
+          if (shouldNotify && dateTime) {
             try {
               const meetingTime = parseWIBTimestamp(dateTime);
               const nowMs = Date.now();
@@ -3194,11 +3199,13 @@ Respond ONLY with valid JSON, no other text.`;
                 await setSetting(`meeting_reminder_${meetingId}_${dateTime}`, "1");
                 console.log(`Secretary: immediate reminder for "${meeting.title}" (${Math.round(diffMin)}min away)`);
               } else if (diffMin > 35) {
-                console.log(`Secretary: meeting "${meeting.title}" scheduled at ${dateTime} WIB — proactive reminder will fire 30min before`);
+                console.log(`Secretary: meeting "${meeting.title}" saved with notify=true, proactive reminder will fire 30min before at ${dateTime} WIB`);
               }
             } catch (reminderErr: any) {
               console.error(`Secretary: failed to process reminder for "${meeting.title}":`, reminderErr?.message);
             }
+          } else {
+            console.log(`Secretary: meeting "${meeting.title}" saved without notification (notify=${shouldNotify}, hasDateTime=${!!dateTime})`);
           }
         }
       }
@@ -3215,16 +3222,19 @@ Respond ONLY with valid JSON, no other text.`;
             source: "conversation",
             notes: item.notes || null,
           });
-          console.log(`Secretary: created action item "${item.title}" (id=${actionId})`);
-          try {
-            const deadlineInfo = item.deadline ? ` — Deadline: ${item.deadline}` : "";
-            await createNotification({
-              type: "action_item",
-              title: `Action item baru dicatat`,
-              message: `${item.title}${item.assignee ? ` → ${item.assignee}` : ""}${deadlineInfo}`,
-              data: JSON.stringify({ action_item_id: actionId }),
-            });
-          } catch (_notifErr) {}
+          console.log(`Secretary: created action item "${item.title}" (id=${actionId}, notify=${!!item.notify})`);
+          if (item.notify === true && item.deadline) {
+            try {
+              const deadlineInfo = ` — Deadline: ${item.deadline}`;
+              await createNotification({
+                type: "action_item",
+                title: `Reminder: action item`,
+                message: `${item.title}${item.assignee ? ` → ${item.assignee}` : ""}${deadlineInfo}`,
+                data: JSON.stringify({ action_item_id: actionId }),
+              });
+              console.log(`Secretary: notification for action item "${item.title}"`);
+            } catch (_notifErr) {}
+          }
         }
       }
     }

@@ -124,6 +124,7 @@ export async function initDatabase() {
       status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'completed', 'cancelled')),
       summary TEXT,
       decisions TEXT,
+      notify BOOLEAN NOT NULL DEFAULT false,
       created_at TEXT NOT NULL DEFAULT (NOW()::TEXT),
       updated_at TEXT NOT NULL DEFAULT (NOW()::TEXT)
     );
@@ -764,6 +765,7 @@ export interface Meeting {
   status: string;
   summary: string | null;
   decisions: string | null;
+  notify: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -799,10 +801,10 @@ export async function getTodayMeetings(): Promise<Meeting[]> {
   return result.rows as Meeting[];
 }
 
-export async function createMeeting(data: { title: string; date_time?: string | null; participants?: string | null; agenda?: string | null }): Promise<number> {
+export async function createMeeting(data: { title: string; date_time?: string | null; participants?: string | null; agenda?: string | null; notify?: boolean }): Promise<number> {
   const result = await pool.query(
-    `INSERT INTO meetings (title, date_time, participants, agenda) VALUES ($1, $2, $3, $4) RETURNING id`,
-    [data.title, data.date_time || null, data.participants || null, data.agenda || null]
+    `INSERT INTO meetings (title, date_time, participants, agenda, notify) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [data.title, data.date_time || null, data.participants || null, data.agenda || null, data.notify === true]
   );
   return result.rows[0].id as number;
 }

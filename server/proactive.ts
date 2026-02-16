@@ -125,6 +125,8 @@ export async function checkMeetingReminders() {
         continue;
       }
 
+      if (!meeting.notify) continue;
+
       if (diffMinutes > 0 && diffMinutes <= 35) {
         const reminderKey = `meeting_reminder_${meeting.id}_${meeting.date_time}`;
         if ((await getSetting(reminderKey)) === "1") continue;
