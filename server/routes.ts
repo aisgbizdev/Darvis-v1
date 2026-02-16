@@ -2438,7 +2438,41 @@ GAYA NGOBROL:
         if (reasoningEffort) {
           chatParams.reasoning_effort = reasoningEffort;
         }
-        const stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
+
+        let stream: any;
+        let actualModel = selectedModel;
+        try {
+          stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
+        } catch (initialErr: any) {
+          const errStatus = initialErr?.status || initialErr?.statusCode;
+          const errMsg = initialErr?.message || String(initialErr);
+          const is429 = errStatus === 429 || errMsg.includes("429");
+          const isModelErr = errStatus === 404 || errMsg.includes("model_not_found") || errMsg.includes("does not exist");
+
+          if ((is429 || isModelErr) && selectedModel !== "gpt-4o") {
+            console.log(`[RETRY] ${selectedModel} failed (${is429 ? "rate_limit" : "model_error"}), falling back to gpt-4o`);
+            actualModel = "gpt-4o";
+            chatParams.model = "gpt-4o";
+            delete chatParams.reasoning_effort;
+            if (is429) {
+              await new Promise(r => setTimeout(r, 2000));
+            }
+            stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
+          } else if (is429 && selectedModel === "gpt-4o") {
+            console.log(`[RETRY] gpt-4o rate limited, falling back to gpt-4o-mini after 2s`);
+            actualModel = "gpt-4o-mini";
+            chatParams.model = "gpt-4o-mini";
+            delete chatParams.reasoning_effort;
+            await new Promise(r => setTimeout(r, 2000));
+            stream = await (openai.chat.completions.create as any)(chatParams, { signal: abortController.signal });
+          } else {
+            throw initialErr;
+          }
+        }
+
+        if (actualModel !== selectedModel) {
+          console.log(`[MODEL] Fallback: ${selectedModel} → ${actualModel}`);
+        }
 
         let fullReply = "";
         let lastFinishReason: string | null = null;
@@ -2618,14 +2652,23 @@ GAYA NGOBROL:
         const isTimeout = streamErr?.name === "AbortError";
         const statusCode = streamErr?.status || streamErr?.statusCode || streamErr?.code;
         const errMessage = streamErr?.message || String(streamErr);
-        const isQuota = statusCode === 429 || errMessage.includes("429") || errMessage.includes("quota") || errMessage.includes("rate limit");
+        const is429 = statusCode === 429 || errMessage.includes("429") || errMessage.toLowerCase().includes("rate limit");
+        const isQuotaExhausted = is429 && (errMessage.includes("quota") || errMessage.includes("billing") || errMessage.includes("exceeded"));
+        const isRateLimit = is429 && !isQuotaExhausted;
+        const isModelError = statusCode === 404 || errMessage.includes("model_not_found") || errMessage.includes("does not exist");
         const isAuthError = statusCode === 401 || statusCode === 403;
 
         let errorMsg: string;
         let retryable = true;
-        if (isQuota) {
-          errorMsg = "Kuota API sedang penuh. Coba lagi dalam beberapa menit ya.";
+        if (isQuotaExhausted) {
+          errorMsg = "Kuota API habis. Cek billing di OpenAI ya.";
           retryable = false;
+        } else if (isRateLimit) {
+          errorMsg = "Server lagi sibuk, coba lagi dalam 30 detik ya.";
+          retryable = true;
+        } else if (isModelError) {
+          errorMsg = "Model AI tidak tersedia. Coba lagi ya.";
+          retryable = true;
         } else if (isAuthError) {
           errorMsg = "Ada masalah autentikasi API. Hubungi admin.";
           retryable = false;
@@ -2635,9 +2678,9 @@ GAYA NGOBROL:
           errorMsg = "Koneksi terputus. Coba lagi ya.";
         }
 
-        console.error("Stream error:", isQuota ? "QUOTA_EXCEEDED" : isTimeout ? "TIMEOUT" : errMessage, "| status:", statusCode, "| full:", JSON.stringify({ message: errMessage, status: statusCode, type: streamErr?.type, code: streamErr?.code }));
+        console.error("Stream error:", isRateLimit ? "RATE_LIMITED" : isQuotaExhausted ? "QUOTA_EXHAUSTED" : isModelError ? "MODEL_ERROR" : isTimeout ? "TIMEOUT" : errMessage, "| status:", statusCode, "| full:", JSON.stringify({ message: errMessage, status: statusCode, type: streamErr?.type, code: streamErr?.code }));
         if (!res.headersSent) {
-          return res.status(isQuota ? 429 : 500).json({ message: errorMsg });
+          return res.status(is429 ? 429 : 500).json({ message: errorMsg });
         }
         res.write(`data: ${JSON.stringify({ type: "error", message: errorMsg, retryable })}\n\n`);
         res.end();
