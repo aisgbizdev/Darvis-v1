@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download, KeyRound, Users, Settings, Check, LayoutDashboard, Phone, PhoneOff, Volume2, FileText, FileSpreadsheet, File, Paperclip, PanelLeft, Menu, Bell } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download, KeyRound, Users, Settings, Check, LayoutDashboard, Phone, PhoneOff, Volume2, FileText, FileSpreadsheet, File, Paperclip, PanelLeft, Menu, Bell, ExternalLink } from "lucide-react";
 import { NotificationCenter } from "@/components/notification-center";
 import { SecretaryDashboard } from "@/components/secretary-dashboard";
 import { ConversationSidebar } from "@/components/conversation-sidebar";
@@ -1218,6 +1218,17 @@ export default function ChatPage() {
           </div>
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1">
+          <a
+            href="https://chatgpt.com/g/g-698fece36da481919d91ecde826444f1-darvis"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="DARVIS di ChatGPT"
+            data-testid="link-chatgpt-darvis"
+          >
+            <Button variant="ghost" size="icon">
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </a>
           {(isOwner || isContributor) ? (
             <Button
               variant="ghost"
