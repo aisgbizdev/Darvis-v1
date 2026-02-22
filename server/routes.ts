@@ -2157,6 +2157,21 @@ GAYA NGOBROL:
           systemContent += secretaryCtx;
           systemContent += `\n\n---\n⚠️ ATURAN WAJIB DATA SECRETARY:\n1. Semua data NODE_TEAM, NODE_MEETING, ACTION ITEMS di atas adalah FAKTA dari database. WAJIB gunakan sebagai acuan utama.\n2. DILARANG KERAS mengarang nama orang, tanggal, posisi, atau jumlah yang TIDAK ADA di data di atas.\n3. Kalau ditanya jumlah tim/anggota, HITUNG dari daftar NODE_TEAM. Kalau ditanya tanggal meeting, AMBIL dari NODE_MEETING.\n4. Kalau data yang ditanya TIDAK ADA di database, jawab jujur: "Gw belum punya data itu. Mau gw catet?"\n5. JANGAN PERNAH bilang "cek di dashboard" kalau lo sudah punya datanya di atas — langsung jawab dari data.`;
         }
+
+        const ecosystemPrompt = readPromptFile("DARVIS_NODE_ECOSYSTEM.md");
+        if (ecosystemPrompt) {
+          systemContent += `\n\n---\nNODE_ECOSYSTEM:\n${ecosystemPrompt}`;
+          nodesUsed.push("NODE_ECOSYSTEM");
+        }
+
+        const isBDMaster = /\b(proyek|project|roadmap|kpi|milestone|progress|sprint|timeline|organisasi|hirarki|hierarki|struktur\s+(?:bd|tim|organisasi)|zona\s+(?:hijau|kuning|merah)|mentor.?mentee|pairing|contact\s+map|audit\s+(?:agustus|individu)|capaian|ews|early\s+warning|manifesto|budaya\s+kerja|regenerasi|delegasi|sgb\s+mini|patd|patl|nm\s+apps|website\s+(?:5|lima)\s+pt|ios\s+(?:5|lima)|crm)\b/i.test(message);
+        if (isBDMaster) {
+          const bdMasterPrompt = readPromptFile("DARVIS_NODE_BD_MASTER.md");
+          if (bdMasterPrompt) {
+            systemContent += `\n\n---\nNODE_BD_MASTER:\n${bdMasterPrompt}`;
+            nodesUsed.push("NODE_BD_MASTER");
+          }
+        }
       }
 
       let isBias = voiceMode ? false : detectBiasIntent(message);
@@ -2230,7 +2245,7 @@ GAYA NGOBROL:
         }
       }
 
-      const isResourceIntent = !voiceMode && /\b(buku|book|referensi|bacaan|sumber|resource|rekomendasi\s+baca|literature|riset|research|jurnal|paper|studi|framework.*referensi)\b/i.test(message);
+      const isResourceIntent = !voiceMode && /\b(buku|book|referensi|bacaan|sumber|resource|rekomendasi\s+baca|literature|riset|research|jurnal|paper|studi|framework.*referensi|newsmaker\.id|newsmaker|bias23|aisg23|nm\s*ai|nm23|sgb\s*mini|patd|patl|e.?book|produk\s+(?:kita|gw|gue|kami)|ekosistem|platform\s+(?:kita|gw|gue)|channel\s+tiktok|trust\s+flow)\b/i.test(message);
       if (isResourceIntent) {
         const resourcePrompt = readPromptFile("DARVIS_NODE_RESOURCES.md");
         if (resourcePrompt) {

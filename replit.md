@@ -32,7 +32,10 @@ DARVIS employs a modern web architecture with a React-based frontend, an Express
     - **State/Database**: Server-side SQLite (better-sqlite3) using `darvis.db` for persistent chat history, auto-summary, learned preferences, profile enrichments, and conversation tags.
     - **Core System Prompt**: `prompts/DARVIS_CORE.md` defines quad-persona rules and context mode rules.
     - **Profile Foundation**: `prompts/DARVIS_PROFILE_DR.md` for DR's foundational knowledge.
-    - **Node System**: Modular context nodes (`NODE_SOLIDGROUP`, `NODE_BIAS`, `NODE_AiSG`, `NODE_NM`, `NODE_RISK_GUARD`, `NODE_COMPLIANCE`) injected based on intent detection. Priority: `NODE_BIAS` > `NODE_RISK_GUARD` > `NODE_NM` > other nodes.
+    - **Node System**: Modular context nodes injected based on intent detection. Priority: `NODE_BIAS` > `NODE_RISK_GUARD` > `NODE_NM` > other nodes.
+        - `NODE_ECOSYSTEM` — Always-on in Mirror Mode. 8 pillars, 23 products, Trust Flow System, TikTok traffic data. File: `prompts/DARVIS_NODE_ECOSYSTEM.md`.
+        - `NODE_BD_MASTER` — Conditional (keywords: proyek, roadmap, KPI, organisasi, zona hijau/kuning/merah, delegasi, etc.). 2026 org chart, team zones, project roadmap with status. File: `prompts/DARVIS_NODE_BD_MASTER.md`.
+        - `NODE_SOLIDGROUP`, `NODE_BIAS`, `NODE_AiSG`, `NODE_NM`, `NODE_RISK_GUARD`, `NODE_COMPLIANCE`, `NODE_RESOURCES` — Conditional keyword-based.
     - **Context Mode Engine (v2.0)**: Auto-detects conversation context (strategic, tactical, reflection, crisis, general) via keyword patterns and injects a framing layer into the system prompt.
     - **Silent Tagging System (v2.0)**: Captures conversation metadata (context_mode, decision_type, emotional_tone, nodes_active, etc.) in `conversation_tags` table for future pattern detection.
     - **Mirror/Twin/Contributor Presentation Architecture (v2.0)**:
