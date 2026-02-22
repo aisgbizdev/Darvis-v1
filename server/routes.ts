@@ -3384,6 +3384,7 @@ Respond ONLY with valid JSON, no other text.`;
     }
 
     if (Array.isArray(parsed.meetings) && parsed.meetings.length > 0) {
+      const existingMeetings = await getMeetings();
       for (const meeting of parsed.meetings.slice(0, 5)) {
         if (meeting.title && typeof meeting.title === "string") {
           let dateTime = meeting.date_time || null;
@@ -3393,6 +3394,14 @@ Respond ONLY with valid JSON, no other text.`;
               dateTime = `${dtStr} 09:00`;
               console.log(`Secretary: date-only detected for "${meeting.title}", defaulting to 09:00 WIB`);
             }
+          }
+          const isDuplicate = existingMeetings.some(em =>
+            em.title.toLowerCase() === meeting.title.toLowerCase() &&
+            em.date_time === dateTime
+          );
+          if (isDuplicate) {
+            console.log(`Secretary: skipping duplicate meeting "${meeting.title}" at ${dateTime}`);
+            continue;
           }
           const meetingId = await createMeeting({
             title: meeting.title,
@@ -3435,8 +3444,17 @@ Respond ONLY with valid JSON, no other text.`;
     }
 
     if (Array.isArray(parsed.action_items) && parsed.action_items.length > 0) {
+      const existingActions = await getPendingActionItems();
       for (const item of parsed.action_items.slice(0, 5)) {
         if (item.title && typeof item.title === "string") {
+          const isDuplicate = existingActions.some(ea =>
+            ea.title.toLowerCase() === item.title.toLowerCase() &&
+            ea.status === "pending"
+          );
+          if (isDuplicate) {
+            console.log(`Secretary: skipping duplicate action item "${item.title}"`);
+            continue;
+          }
           const actionId = await createActionItem({
             title: item.title,
             assignee: item.assignee || null,
@@ -3481,8 +3499,17 @@ Respond ONLY with valid JSON, no other text.`;
     }
 
     if (Array.isArray(parsed.follow_ups) && parsed.follow_ups.length > 0) {
+      const allPendingForFU = await getPendingActionItems();
       for (const fu of parsed.follow_ups.slice(0, 3)) {
         if (fu.text && typeof fu.text === "string") {
+          const isDupFU = allPendingForFU.some(ea =>
+            ea.title.toLowerCase() === fu.text.toLowerCase() &&
+            ea.status === "pending"
+          );
+          if (isDupFU) {
+            console.log(`Secretary: skipping duplicate follow-up "${fu.text}"`);
+            continue;
+          }
           await createActionItem({
             title: fu.text,
             assignee: "DR",

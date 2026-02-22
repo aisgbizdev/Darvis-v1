@@ -258,6 +258,7 @@ function TeamTab() {
                     )}
                   </div>
                   {m.position && <p className="text-[10px] text-muted-foreground truncate" data-testid={`text-team-position-${m.id}`}>{m.position}</p>}
+                  {m.responsibilities && <p className="text-[10px] text-blue-600 dark:text-blue-400 truncate" data-testid={`text-team-jobdesk-${m.id}`}>Job desk: {m.responsibilities}</p>}
                   {m.aliases && <p className="text-[9px] text-muted-foreground/70 truncate italic" data-testid={`text-team-aliases-${m.id}`}>alias: {m.aliases}</p>}
                 </div>
                 <div className="flex gap-0.5 shrink-0">

@@ -349,6 +349,20 @@ async function aggressiveCleanup() {
     if (cleaned > 0) {
       console.log(`Cleanup: removed ${cleaned} old notifications`);
     }
+
+    const overdueResult = await pool.query(`
+      DELETE FROM action_items WHERE status = 'pending' AND deadline IS NOT NULL AND deadline::date < CURRENT_DATE - INTERVAL '3 days'
+    `);
+    if ((overdueResult.rowCount || 0) > 0) {
+      console.log(`Cleanup: auto-deleted ${overdueResult.rowCount} overdue action items (3+ days past deadline)`);
+    }
+
+    const completedMeetings = await pool.query(`
+      DELETE FROM meetings WHERE status = 'completed' AND date_time IS NOT NULL AND date_time::timestamp < NOW() - INTERVAL '7 days'
+    `);
+    if ((completedMeetings.rowCount || 0) > 0) {
+      console.log(`Cleanup: auto-deleted ${completedMeetings.rowCount} completed meetings (7+ days old)`);
+    }
   } catch (err: any) {
     console.error("Aggressive cleanup failed:", err?.message || err);
   }
