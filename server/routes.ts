@@ -1358,7 +1358,9 @@ export async function registerRoutes(
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       const status = req.query.status as string | undefined;
       const assignee = req.query.assignee as string | undefined;
-      return res.json({ items: await getActionItems({ status, assignee }) });
+      const allItems = await getActionItems({ status, assignee });
+      const filtered = status ? allItems : allItems.filter(i => i.status !== "cancelled");
+      return res.json({ items: filtered });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -3385,6 +3387,7 @@ Respond ONLY with valid JSON, no other text.`;
 
     if (Array.isArray(parsed.meetings) && parsed.meetings.length > 0) {
       const existingMeetings = await getMeetings();
+      const seenMeetingKeys = new Set(existingMeetings.map(em => `${em.title.toLowerCase()}|${em.date_time || ""}`));
       for (const meeting of parsed.meetings.slice(0, 5)) {
         if (meeting.title && typeof meeting.title === "string") {
           let dateTime = meeting.date_time || null;
@@ -3395,14 +3398,12 @@ Respond ONLY with valid JSON, no other text.`;
               console.log(`Secretary: date-only detected for "${meeting.title}", defaulting to 09:00 WIB`);
             }
           }
-          const isDuplicate = existingMeetings.some(em =>
-            em.title.toLowerCase() === meeting.title.toLowerCase() &&
-            em.date_time === dateTime
-          );
-          if (isDuplicate) {
+          const meetingKey = `${meeting.title.toLowerCase()}|${dateTime || ""}`;
+          if (seenMeetingKeys.has(meetingKey)) {
             console.log(`Secretary: skipping duplicate meeting "${meeting.title}" at ${dateTime}`);
             continue;
           }
+          seenMeetingKeys.add(meetingKey);
           const meetingId = await createMeeting({
             title: meeting.title,
             date_time: dateTime,
@@ -3445,16 +3446,15 @@ Respond ONLY with valid JSON, no other text.`;
 
     if (Array.isArray(parsed.action_items) && parsed.action_items.length > 0) {
       const existingActions = await getPendingActionItems();
+      const seenActionKeys = new Set(existingActions.map(ea => ea.title.toLowerCase()));
       for (const item of parsed.action_items.slice(0, 5)) {
         if (item.title && typeof item.title === "string") {
-          const isDuplicate = existingActions.some(ea =>
-            ea.title.toLowerCase() === item.title.toLowerCase() &&
-            ea.status === "pending"
-          );
-          if (isDuplicate) {
+          const actionKey = item.title.toLowerCase();
+          if (seenActionKeys.has(actionKey)) {
             console.log(`Secretary: skipping duplicate action item "${item.title}"`);
             continue;
           }
+          seenActionKeys.add(actionKey);
           const actionId = await createActionItem({
             title: item.title,
             assignee: item.assignee || null,
@@ -3500,16 +3500,15 @@ Respond ONLY with valid JSON, no other text.`;
 
     if (Array.isArray(parsed.follow_ups) && parsed.follow_ups.length > 0) {
       const allPendingForFU = await getPendingActionItems();
+      const seenFUKeys = new Set(allPendingForFU.map(ea => ea.title.toLowerCase()));
       for (const fu of parsed.follow_ups.slice(0, 3)) {
         if (fu.text && typeof fu.text === "string") {
-          const isDupFU = allPendingForFU.some(ea =>
-            ea.title.toLowerCase() === fu.text.toLowerCase() &&
-            ea.status === "pending"
-          );
-          if (isDupFU) {
+          const fuKey = fu.text.toLowerCase();
+          if (seenFUKeys.has(fuKey)) {
             console.log(`Secretary: skipping duplicate follow-up "${fu.text}"`);
             continue;
           }
+          seenFUKeys.add(fuKey);
           await createActionItem({
             title: fu.text,
             assignee: "DR",
