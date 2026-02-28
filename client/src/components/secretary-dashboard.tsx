@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   Brain,
+  Archive,
 } from "lucide-react";
 
 interface TeamMember {
@@ -530,9 +531,15 @@ function ActionItemsTab() {
   const [addPriority, setAddPriority] = useState("medium");
   const [editTitle, setEditTitle] = useState("");
   const [editAssignee, setEditAssignee] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data, isLoading } = useQuery<{ items: ActionItem[] }>({
     queryKey: ["/api/action-items"],
+  });
+
+  const { data: archivedData } = useQuery<{ items: ActionItem[] }>({
+    queryKey: ["/api/action-items/archived"],
+    enabled: showArchived,
   });
 
   const addMutation = useMutation({
@@ -559,6 +566,7 @@ function ActionItemsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/action-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/action-items/archived"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       setEditId(null);
     },
@@ -733,6 +741,50 @@ function ActionItemsTab() {
           <Plus className="w-3 h-3" /> Tambah Action Item
         </Button>
       )}
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowArchived(!showArchived)}
+        className="w-full text-muted-foreground text-[10px]"
+        data-testid="button-toggle-archived"
+      >
+        <Archive className="w-3 h-3" />
+        {showArchived ? "Sembunyikan Arsip" : "Lihat Arsip"}
+        {showArchived ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </Button>
+
+      {showArchived && (
+        <div className="flex flex-col gap-1.5">
+          {(archivedData?.items || []).length === 0 ? (
+            <p className="text-[10px] text-muted-foreground text-center py-2" data-testid="text-empty-archived">Belum ada item arsip</p>
+          ) : (
+            (archivedData?.items || []).map((item) => (
+              <Card key={item.id} className="p-2 opacity-70" data-testid={`card-archived-action-${item.id}`}>
+                <div className="flex items-start gap-2">
+                  <Archive className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-muted-foreground line-through" data-testid={`text-archived-title-${item.id}`}>{item.title}</p>
+                    {item.assignee && <p className="text-[9px] text-muted-foreground">{item.assignee}</p>}
+                    {item.notes && <p className="text-[9px] text-muted-foreground italic">{item.notes}</p>}
+                    {item.deadline && <p className="text-[9px] text-muted-foreground">Deadline: {new Date(item.deadline).toLocaleDateString("id-ID")}</p>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0"
+                    onClick={() => updateMutation.mutate({ id: item.id, data: { status: "pending" } })}
+                    title="Kembalikan ke pending"
+                    data-testid={`button-restore-action-${item.id}`}
+                  >
+                    <CheckSquare className="w-3 h-3" />
+                  </Button>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -744,6 +796,12 @@ function ProjectsTab() {
   const [addPic, setAddPic] = useState("");
   const [editName, setEditName] = useState("");
   const [editPic, setEditPic] = useState("");
+  const [editProgress, setEditProgress] = useState(0);
+  const [editStatus, setEditStatus] = useState("active");
+  const [editMilestones, setEditMilestones] = useState("");
+  const [editDeadline, setEditDeadline] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   const { data, isLoading } = useQuery<{ projects: Project[] }>({
     queryKey: ["/api/projects"],
@@ -816,13 +874,81 @@ function ProjectsTab() {
                 className="text-xs h-7"
                 data-testid={`input-edit-project-pic-${p.id}`}
               />
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground shrink-0 w-14">Progress:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={editProgress}
+                  onChange={(e) => setEditProgress(Number(e.target.value))}
+                  className="flex-1 h-1.5 accent-primary"
+                  data-testid={`input-edit-project-progress-${p.id}`}
+                />
+                <span className="text-[10px] text-muted-foreground w-8 text-right">{editProgress}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground shrink-0 w-14">Status:</span>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="flex-1 text-[10px] h-7 rounded border border-input bg-background px-2"
+                  data-testid={`input-edit-project-status-${p.id}`}
+                >
+                  <option value="planning">Planning</option>
+                  <option value="active">Active</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <Input
+                value={editDeadline}
+                onChange={(e) => setEditDeadline(e.target.value)}
+                placeholder="Deadline (YYYY-MM-DD)"
+                type="date"
+                className="text-xs h-7"
+                data-testid={`input-edit-project-deadline-${p.id}`}
+              />
+              <Input
+                value={editMilestones}
+                onChange={(e) => setEditMilestones(e.target.value)}
+                placeholder="Milestones"
+                className="text-xs h-7"
+                data-testid={`input-edit-project-milestones-${p.id}`}
+              />
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Deskripsi proyek"
+                className="text-xs min-h-[40px] rounded border border-input bg-background px-2 py-1 resize-none"
+                rows={2}
+                data-testid={`input-edit-project-description-${p.id}`}
+              />
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Catatan tambahan"
+                className="text-xs min-h-[40px] rounded border border-input bg-background px-2 py-1 resize-none"
+                rows={2}
+                data-testid={`input-edit-project-notes-${p.id}`}
+              />
               <div className="flex gap-1 justify-end">
                 <Button variant="ghost" size="sm" onClick={() => setEditId(null)} data-testid={`button-cancel-edit-project-${p.id}`}>
                   Batal
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => updateMutation.mutate({ id: p.id, data: { name: editName, pic: editPic || null } })}
+                  onClick={() => updateMutation.mutate({ id: p.id, data: {
+                    name: editName,
+                    pic: editPic || null,
+                    progress: editProgress,
+                    status: editStatus,
+                    deadline: editDeadline || null,
+                    milestones: editMilestones || null,
+                    description: editDescription || null,
+                    notes: editNotes || null,
+                  } })}
                   disabled={!editName.trim() || updateMutation.isPending}
                   data-testid={`button-save-project-${p.id}`}
                 >
@@ -858,7 +984,17 @@ function ProjectsTab() {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
-                  onClick={() => { setEditId(p.id); setEditName(p.name); setEditPic(p.pic || ""); }}
+                  onClick={() => {
+                    setEditId(p.id);
+                    setEditName(p.name);
+                    setEditPic(p.pic || "");
+                    setEditProgress(p.progress || 0);
+                    setEditStatus(p.status || "active");
+                    setEditDeadline(p.deadline || "");
+                    setEditMilestones(p.milestones || "");
+                    setEditDescription(p.description || "");
+                    setEditNotes(p.notes || "");
+                  }}
                   data-testid={`button-edit-project-${p.id}`}
                 >
                   <Edit2 className="w-3 h-3" />

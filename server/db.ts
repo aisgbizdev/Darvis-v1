@@ -137,7 +137,7 @@ export async function initDatabase() {
       title TEXT NOT NULL,
       assignee TEXT,
       deadline TEXT,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed', 'cancelled')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed', 'cancelled', 'archived')),
       priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
       source TEXT,
       meeting_id INTEGER,
@@ -216,6 +216,7 @@ export async function initDatabase() {
     `ALTER TABLE team_members ADD COLUMN IF NOT EXISTS personality_notes TEXT`,
     `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS room_id INTEGER`,
     `ALTER TABLE profile_enrichments ADD COLUMN IF NOT EXISTS contributor_name TEXT`,
+    `DO $$ BEGIN ALTER TABLE action_items DROP CONSTRAINT IF EXISTS action_items_status_check; ALTER TABLE action_items ADD CONSTRAINT action_items_status_check CHECK(status IN ('pending', 'in_progress', 'completed', 'cancelled', 'archived')); EXCEPTION WHEN OTHERS THEN NULL; END $$`,
   ];
 
   for (const migration of migrations) {
@@ -1361,12 +1362,30 @@ export async function getAllRoomSummaries(sessionId: string): Promise<{ roomId: 
   return results;
 }
 
-export async function moveMessagesToRoom(userId: string, roomId: number) {
+export async function moveMessagesToRoom(userId: string, roomId: number, sinceMinutes: number = 5) {
   await pool.query(
-    `UPDATE conversations SET room_id = $1 WHERE user_id = $2 AND room_id IS NULL`,
+    `UPDATE conversations SET room_id = $1 WHERE user_id = $2 AND room_id IS NULL AND created_at::timestamp > NOW() - INTERVAL '${sinceMinutes} minutes'`,
     [roomId, userId]
   );
   await touchChatRoom(roomId);
+}
+
+export async function getLastLobbyMessageTime(userId: string): Promise<Date | null> {
+  const result = await pool.query(
+    `SELECT created_at FROM conversations WHERE user_id = $1 AND room_id IS NULL ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  if (result.rows.length > 0 && result.rows[0].created_at) {
+    return new Date(result.rows[0].created_at);
+  }
+  return null;
+}
+
+export async function getArchivedActionItems(): Promise<any[]> {
+  const result = await pool.query(
+    `SELECT * FROM action_items WHERE status = 'archived' ORDER BY updated_at DESC LIMIT 20`
+  );
+  return result.rows;
 }
 
 export async function mergeRooms(targetRoomId: number, sourceRoomIds: number[]) {

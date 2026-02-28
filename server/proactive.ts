@@ -351,17 +351,17 @@ async function aggressiveCleanup() {
     }
 
     const overdueResult = await pool.query(`
-      UPDATE action_items SET status = 'cancelled' WHERE status = 'pending' AND deadline IS NOT NULL AND deadline::date < CURRENT_DATE - INTERVAL '3 days'
+      UPDATE action_items SET status = 'archived' WHERE status = 'pending' AND deadline IS NOT NULL AND deadline::date < CURRENT_DATE - INTERVAL '3 days'
     `);
     if ((overdueResult.rowCount || 0) > 0) {
-      console.log(`Cleanup: auto-cancelled ${overdueResult.rowCount} overdue action items (3+ days past deadline)`);
+      console.log(`Cleanup: auto-archived ${overdueResult.rowCount} overdue action items (3+ days past deadline)`);
     }
 
     const deleteOldCancelled = await pool.query(`
-      DELETE FROM action_items WHERE status IN ('cancelled', 'done') AND updated_at::timestamp < NOW() - INTERVAL '14 days'
+      DELETE FROM action_items WHERE status = 'cancelled' AND updated_at::timestamp < NOW() - INTERVAL '14 days'
     `);
     if ((deleteOldCancelled.rowCount || 0) > 0) {
-      console.log(`Cleanup: purged ${deleteOldCancelled.rowCount} old cancelled/done action items (14+ days)`);
+      console.log(`Cleanup: purged ${deleteOldCancelled.rowCount} old cancelled action items (14+ days)`);
     }
 
     const completedMeetings = await pool.query(`

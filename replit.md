@@ -1,92 +1,66 @@
 # DARVIS - DiAn Raha Vision v2.0
 
 ## Overview
-DARVIS is an AI-powered thinking framework distributor, designed to disseminate thinking patterns and decision-making frameworks. Its core philosophy is to distribute frameworks rather than personal branding, offering a single core thinking engine with two presentation layers (Mirror/Twin). The project aims to provide an advanced AI companion for strategic thinking, decision-making, and personal development, leveraging a multi-persona approach to offer diverse perspectives.
+DARVIS is an AI-powered thinking framework distributor, designed to disseminate thinking patterns and decision-making frameworks. It provides an advanced AI companion for strategic thinking, decision-making, and personal development, leveraging a multi-persona approach to offer diverse perspectives. The project's core philosophy is to distribute frameworks rather than personal branding, offering a single core thinking engine with two presentation layers (Mirror/Twin).
 
 ## User Preferences
 - **Bahasa**: Selalu gunakan Bahasa Indonesia untuk semua komunikasi dan respons. Jangan campur dengan bahasa Inggris supaya tidak salah tafsir.
 
 ## System Architecture
-DARVIS employs a modern web architecture with a React-based frontend, an Express.js backend, and a SQLite database for persistence.
+DARVIS utilizes a modern web architecture.
 
-- **UI/UX Decisions**:
-    - Single-page minimalist chat UI.
-    - **Quad-persona display (Mirror Mode)**: Visual cards representing Broto (logis, tegas, risiko), Rara (reflektif, empatik, emosi), Rere (pelengkap, kreatif, devil's advocate), and DR (digital twin, santai, CBD perspective).
-    - Context mode UI indicator (subtle badge below last assistant message).
-    - Preferences panel (lightbulb icon) to view learned preferences and profile enrichments.
-    - Owner login (lock icon) and logout functionality for Mirror Mode.
-    - Adaptive empty state based on presentation mode.
-    - PWA support for installability on mobile devices, including manifest.json and service worker for offline capabilities.
-    - Download Conversation feature (MD + PDF) with professional report header/footer.
-    - Markdown rendering in chat (react-markdown) — bold, italic, heading, list, blockquote, code, emoji.
-    - Optimized system prompt (65-70% token reduction) + prompt file caching + SSE flush for faster streaming.
-    - Voice Input for speech-to-text.
-    - Voice Conversation Mode (hands-free): VAD with 2.5s silence auto-send, TTS auto-play after response, voice selector (9 OpenAI voices), conversation loop (speak → listen → respond → speak).
-    - Per-message TTS playback: hover speaker icon on any assistant message to hear it read aloud.
-    - Image Upload & Analysis for multi-image processing.
+**UI/UX Decisions:**
+- Single-page minimalist chat UI with PWA support.
+- Quad-persona display for Mirror Mode (Broto, Rara, Rere, DR) with context mode indicators.
+- Preferences panel and owner login functionality.
+- Adaptive empty states and download conversation features (MD + PDF).
+- Markdown rendering, Voice Input, Voice Conversation Mode (VAD, TTS auto-play), and per-message TTS playback.
+- Image Upload & Analysis for multi-image processing.
+- Secretary Dashboard (owner-only) with CRUD operations for team, meetings, action items, and projects.
+- Notification Center and Conversation Rooms sidebar.
 
-- **Technical Implementations**:
-    - **Frontend**: React, TypeScript, Tailwind CSS, shadcn/ui.
-    - **Backend**: Express.js with OpenAI API integration.
-    - **AI Model**: Smart model routing — GPT-5 for strategic/complex topics, GPT-4o-mini for casual chat and all background extraction tasks (auto-learn, profile enrichment, secretary extraction, summaries, room detection). Fallback chain: GPT-5 → GPT-4o → GPT-4o-mini → Gemini 2.5 Flash → Ollama (self-hosted, configured via OLLAMA_BASE_URL/OLLAMA_MODEL/OLLAMA_TIMEOUT_MS env vars). Each fallback triggered by quota exhaustion or provider failure.
-    - **State/Database**: PostgreSQL (Neon-backed via DATABASE_URL) for persistent chat history, auto-summary, learned preferences, profile enrichments, and conversation tags. Auto-sync mechanism in `syncTeamZonaData()` ensures team zona/strengths data is consistent across dev and production on server startup.
-    - **Core System Prompt**: `prompts/DARVIS_CORE.md` defines quad-persona rules and context mode rules.
-    - **Profile Foundation**: `prompts/DARVIS_PROFILE_DR.md` for DR's foundational knowledge.
-    - **Node System**: Modular context nodes injected based on intent detection. Priority: `NODE_BIAS` > `NODE_RISK_GUARD` > `NODE_NM` > other nodes.
-        - `NODE_ECOSYSTEM` — Always-on in Mirror Mode. 8 pillars, 23 products, Trust Flow System, TikTok traffic data. File: `prompts/DARVIS_NODE_ECOSYSTEM.md`.
-        - `NODE_BD_MASTER` — Conditional (keywords: proyek, roadmap, KPI, organisasi, zona hijau/kuning/merah, delegasi, etc.). 2026 org chart, team zones, project roadmap with status. File: `prompts/DARVIS_NODE_BD_MASTER.md`.
-        - `NODE_SOLIDGROUP`, `NODE_BIAS`, `NODE_AiSG`, `NODE_NM`, `NODE_RISK_GUARD`, `NODE_COMPLIANCE`, `NODE_RESOURCES` — Conditional keyword-based.
-    - **Context Mode Engine (v2.0)**: Auto-detects conversation context (strategic, tactical, reflection, crisis, general) via keyword patterns and injects a framing layer into the system prompt.
-    - **Silent Tagging System (v2.0)**: Captures conversation metadata (context_mode, decision_type, emotional_tone, nodes_active, etc.) in `conversation_tags` table for future pattern detection.
-    - **Mirror/Twin/Contributor Presentation Architecture (v2.0)**:
-        - **Mirror Mode (Owner only)**: Full persona cards, sharper tone, owner identity references, preferences panel, profile enrichment.
-        - **Twin Mode (Default for all users)**: Unified voice, no persona labels, no owner identity references, framework-first approach.
-        - **Contributor Mode (Password-protected)**: Unified voice like Twin, but DARVIS knows user kenal DR. Every message auto-extracted as profile enrichment → stored to shared pool (`contributor_shared`). Owner's prompt pulls from both own enrichments and contributor pool.
-        - **Contributor Self-Profile (v2.0)**: After login, DARVIS asks contributor's name. If matched to team_members (via name/alias), session stores `contributorTeamMemberId`/`contributorTeamMemberName`. DARVIS becomes natural interviewer, extracting persona data (job desk, work_style, communication_style, triggers, commitments, personality_notes) from conversation. Auto-detection from message content + `/api/contributor-identify` endpoint. Dual extraction: DR enrichment + self persona. Fallback to regular Contributor if name not matched.
-        - Server-side transformation (`mergePersonasToUnifiedVoice()`, `redactOwnerIdentity()`) to adapt output based on presentation mode.
-        - Single login field — password determines mode (Owner vs Contributor vs wrong).
-    - **Persona System (v2.0)**:
-        - Default unified voice, with multi-persona output activated on demand in Mirror Mode.
-        - DR persona speaks like "mas DR" (Mirror only).
-    - **Auto-Learn System**: Extracts user preferences every 10 messages across 12 categories, stores them in `learned_preferences`, and injects them into the system prompt for personalized responses.
-    - **Profile Enrichment System**: Automatically detects and extracts DR's self-descriptions from conversations, storing them in `profile_enrichments` and injecting them into the system prompt.
-    - **Passive Listening System**: Detects and extracts user feedback on personas, stores it in `persona_feedback`, and injects top feedback into the system prompt.
-    - **Session Management**: `express-session` with unique session IDs for isolation of chat history and learned data per browser/device.
-    - **Anti Echo-Chamber Protocol**: DARVIS provides counter-angles for user's firm beliefs or high-stakes decisions.
-    - **Memory Governor**: Limits injected preferences, uses a scoring system, and guards context budget.
-    - **Decision Fast Mode**: Provides concise 3-bullet summaries with risks, blind spots, and actions when triggered.
-    - **Streaming SSE responses**: Real-time word-by-word response delivery.
-    - **Secretary System (v2.0)**: Strategic secretary layer in Mirror Mode — manages team members, meetings, action items, and projects.
-        - Database tables: `team_members` (with `aliases` and `category` columns), `meetings`, `action_items`, `projects`, `notifications`.
-        - **People Database**: 31 seeded people across categories: BD team (14), direksi 5 PT (10), management (3), family (3). Each person can have aliases (e.g., "Tailo" = Nelson Lee, "Mas Ir" = Iriawan).
-        - **Categories**: `team` (BD staff), `direksi` (directors of 5 PTs), `management` (atasan/key people), `family` (keluarga DR), `external` (orang luar).
-        - **Alias Resolution**: `getTeamMemberByNameOrAlias()` checks both name and comma-separated aliases to prevent duplicates when DR uses different names for the same person.
-        - **Auto-Detect Nama Baru (Mirror Mode)**: When DR mentions an unknown name, DARVIS asks "Siapa [nama]?" and saves the answer to the database. NODE_TEAM always injected in Mirror Mode with grouped categories.
-        - Auto-extraction from conversation: GPT-powered extraction of team profiles (with aliases/category), meetings, action items, projects from natural chat in Mirror Mode. **Deduplication**: meetings checked by title+date_time, action items checked by title against pending items, using Set-based tracking to prevent both DB duplicates and within-batch duplicates.
-        - Dynamic context injection: `NODE_TEAM` (always in Mirror), `NODE_MEETING`, `NODE_PROJECTS` injected based on intent detection.
-        - Proactive notifications: meeting reminders (30min before, only for notify=true meetings), overdue alerts, project deadlines (3 days), daily briefing (6-9am WIB), DARVIS insights (max 2-3x/day).
-        - **Aggressive Notification Cleanup (v2.0)**: Meeting reminders older than 1 hour auto-deleted. Read notifications (non-insight) older than 2 hours auto-deleted. Cleanup runs every 5 minutes alongside meeting reminder checks.
-        - **Auto-Cleanup Overdue (v2.0)**: Action items pending 3+ days past deadline auto-cancelled (not deleted). Cancelled/done items purged after 14 days. Completed meetings older than 7 days auto-deleted.
-        - **WIB Timezone (v2.0)**: All date/time operations use `Asia/Jakarta` (WIB/UTC+7) via `Intl.DateTimeFormat`. Helper functions in `server/proactive.ts`: `getWIBDate()`, `getWIBDateString()`, `getWIBTimeString()`, `getWIBHour()`, `getWIBDayName()`, `parseWIBTimestamp()`. Extraction prompt references WIB explicitly.
-        - **Auto-Reminder on Extraction (v2.0)**: When meeting is extracted from conversation and is within 35 minutes, immediate reminder notification is created. For meetings further out, proactive cycle handles reminders at 30min before.
-        - **Aggressive Notification Cleanup (v2.0)**: Meeting reminders older than 1 hour auto-deleted. Read notifications (non-insight) older than 2 hours auto-deleted. Cleanup runs every 5 minutes alongside meeting reminder checks.
-        - **Extraction Reminder Rules (v2.0)**: "ingetin gue", "jangan lupa", "catat jam X", "mau ke X jam Y" etc. are FORCED into meetings (not follow_ups) in the GPT extraction prompt.
-        - Secretary Dashboard: accessible via header icon (owner-only), 4 tabs (Tim, Meeting, Action Items, Projects) with full CRUD, inline editing, status toggling. Shows category badges and aliases. Team cards have expandable persona detail panel (brain icon indicator).
-        - **Team Persona Profiling (v2.0)**: DARVIS auto-extracts persona data (work_style, communication_style, triggers, commitments, personality_notes) from natural conversation and file uploads in Mirror Mode. Persona data injected into context when discussing delegation, team assignments, or character topics. Database columns added to `team_members` table. `appendIfNew()` logic prevents duplicate persona entries.
-        - Notification Center: bell icon with unread badge, grouped notifications by type.
-        - All secretary features owner-only protected.
-    - **Conversation Rooms (v2.0, Owner-only)**: Organize chat history by topic while maintaining unified global context across all rooms.
-        - Database: `chat_rooms` table with `session_id`, `title`, `created_at`, `updated_at`. Conversations linked via `room_id`.
-        - API: `/api/rooms` (GET list, POST create, PATCH rename, DELETE, POST merge), room-aware `/api/history?roomId=X`, `/api/chat` with `roomId` in payload, `/api/clear` with `roomId`.
-        - Frontend: `ConversationSidebar` component with room list, create/rename/delete/merge. Toggle via PanelLeft icon in header (owner-only). Desktop: 224px side panel. Mobile: full-screen drawer with backdrop.
-        - **Lobby**: Default free-chat area (no room). Messages in lobby can be auto-routed to rooms.
-        - Key design: All learned preferences, profile enrichments, persona feedback, and secretary data remain **global shared** across rooms — DARVIS maintains unified "brain" unlike ChatGPT's isolated conversations.
-        - Auto-summary per room via `generateRoomSummary()`.
-        - **Smart Room Context (v2.0)**: Saat user masuk room, DARVIS ambil history penuh (≤40 pesan) atau 30 pesan terakhir + room summary (>40 pesan). Lobby/Twin tetap 6 pesan terakhir. Ini memastikan DARVIS nyambung percakapan dari awal topik room.
-        - **Auto-Room Management (v2.0)**: GPT-powered `detectRoomAction()` analyzes lobby messages against existing room summaries. Actions: `stay_lobby` (casual chat), `move_to_existing` (topic matches existing room), `create_new` (substantive new topic). Runs in parallel with chat completion to avoid latency. Frontend auto-switches room with toast notification.
-        - **Room Merge**: Owner can select 2+ rooms in sidebar merge mode, first selected becomes target. `mergeRooms()` atomically moves all messages and deletes source rooms. Server validates room ownership.
-    - **Key Files**: `server/proactive.ts` (proactive system), `client/src/components/secretary-dashboard.tsx`, `client/src/components/notification-center.tsx`, `client/src/components/conversation-sidebar.tsx`.
+**Technical Implementations:**
+- **Frontend**: React, TypeScript, Tailwind CSS, shadcn/ui.
+- **Backend**: Express.js.
+- **AI Model**: Smart model routing with GPT-5 for complex tasks, GPT-4o-mini for casual chat and background extractions. Includes a fallback chain: GPT-5 → GPT-4o → GPT-4o-mini → Gemini 2.5 Flash → Ollama.
+- **State/Database**: PostgreSQL for persistent chat history, auto-summary, learned preferences, profile enrichments, and conversation tags.
+- **Core System Prompt**: `prompts/DARVIS_CORE.md` defines quad-persona and context mode rules.
+- **Profile Foundation**: `prompts/DARVIS_PROFILE_DR.md` for DR's foundational knowledge.
+- **Node System**: Modular context nodes injected based on intent detection, including `NODE_ECOSYSTEM`, `NODE_BD_MASTER`, and others.
+- **Context Mode Engine (v2.0)**: Auto-detects conversation context (strategic, tactical, reflection, crisis, general) and injects framing layers.
+- **Silent Tagging System (v2.0)**: Captures conversation metadata for pattern detection.
+- **Presentation Architecture (v2.0)**:
+    - **Mirror Mode (Owner only)**: Full persona cards, owner identity references, preferences panel.
+    - **Twin Mode (Default)**: Unified voice, no persona labels, framework-first approach.
+    - **Contributor Mode (Password-protected)**: Unified voice, auto-extracts profile enrichment for a shared pool.
+    - **Contributor Self-Profile (v2.0)**: Extracts detailed persona data from conversation.
+- **Persona System (v2.0)**: Default unified voice; multi-persona output on demand in Mirror Mode.
+- **Auto-Learn System**: Extracts and injects user preferences into the system prompt.
+- **Profile Enrichment System**: Automatically extracts and injects DR's self-descriptions.
+- **Passive Listening System**: Detects and injects user feedback on personas.
+- **Session Management**: `express-session` for isolated chat history.
+- **Anti Echo-Chamber Protocol**: Provides counter-angles for user's beliefs.
+- **Memory Governor**: Limits injected preferences and manages context budget.
+- **Decision Fast Mode**: Provides concise 3-bullet summaries.
+- **Streaming SSE responses**: Real-time response delivery.
+- **Secretary System (v2.0, Mirror Mode)**: Manages team members, meetings, action items, and projects.
+    - Includes `team_members` with aliases and categories, `meetings`, `action_items`, `projects`, `notifications`.
+    - Features a seeded people database, alias resolution, auto-detection of new names, and GPT-powered extraction of secretary data from conversations.
+    - Dynamic context injection for secretary nodes (`NODE_TEAM`, `NODE_MEETING`, `NODE_PROJECTS`).
+    - Proactive notifications for meetings and deadlines, with aggressive cleanup for old notifications and overdue items.
+    - All date/time operations use `Asia/Jakarta` (WIB).
+    - Team Persona Profiling (v2.0): Extracts work style, communication style, etc., from conversations.
+- **Conversation Rooms (v2.0, Owner-only)**: Organizes chat history by topic while maintaining global context.
+    - `chat_rooms` table with API for management.
+    - "Lobby" for default free-chat, with smart auto-room management (v2.1: 3-min cooldown, time-limited move, numbered list protection).
+    - Supports room merging.
+    - Key design: global shared preferences and secretary data across all rooms.
+    - Smart Room Context: injects relevant history or summary when entering a room.
+    - Secretary Knowledge Injection (v2.1): All secretary data feeds DARVIS context with mandatory usage instruction.
+    - Action items archived (not deleted) after 3 days overdue. Archived section in dashboard with restore.
+    - Project editing: progress slider, status dropdown, milestones, deadline, description, notes.
+    - Fuzzy deduplication for action items. Stricter extraction rules (only explicit requests/delegations).
 
 ## External Dependencies
-- **OpenAI API**: Used for AI model inference (GPT-5 for strategic, GPT-4o-mini for casual/extraction).
-- **Web Speech API (Browser)**: Utilized for the Voice Input feature to convert speech to text.
+- **OpenAI API**: Used for AI model inference (GPT-5, GPT-4o-mini).
+- **Web Speech API (Browser)**: For speech-to-text functionality.

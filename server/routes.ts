@@ -81,6 +81,8 @@ import {
   getAllRoomSummaries,
   moveMessagesToRoom,
   mergeRooms,
+  getLastLobbyMessageTime,
+  getArchivedActionItems,
 } from "./db";
 import { getVapidPublicKey, sendPushToAll } from "./push";
 import { getWIBDateString, getWIBTimeString, getWIBDayName, parseWIBTimestamp } from "./proactive";
@@ -867,7 +869,9 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
         context += `- ${a.title}`;
         if (a.assignee) context += ` → ${a.assignee}`;
         if (a.deadline) context += ` (deadline: ${a.deadline})`;
-        context += ` [${a.priority}]\n`;
+        context += ` [${a.priority}]`;
+        if (a.notes) context += ` — Catatan: ${a.notes}`;
+        context += `\n`;
       }
       context += `Ingatkan mas DR tentang item overdue secara natural jika relevan.`;
     }
@@ -877,9 +881,26 @@ async function buildSecretaryContext(message: string, isOwner: boolean = false):
         context += `- ${a.title}`;
         if (a.assignee) context += ` → ${a.assignee}`;
         if (a.deadline) context += ` (deadline: ${a.deadline})`;
-        context += ` [${a.priority}]\n`;
+        context += ` [${a.priority}]`;
+        if (a.notes) context += ` — Catatan: ${a.notes}`;
+        context += `\n`;
       }
     }
+  }
+
+  if (isOwner) {
+    const archived = await getArchivedActionItems();
+    if (archived.length > 0) {
+      context += `\n\n---\nACTION ITEMS ARSIP (${archived.length} terakhir — referensi historis):\n`;
+      for (const a of archived.slice(0, 10)) {
+        context += `- ${a.title}`;
+        if (a.assignee) context += ` → ${a.assignee}`;
+        if (a.notes) context += ` — ${a.notes}`;
+        context += `\n`;
+      }
+    }
+
+    context += `\n\n---\n⚠️ INSTRUKSI WAJIB SECRETARY KNOWLEDGE:\nSemua data di NODE_TEAM, NODE_MEETING, NODE_PROJECTS, ACTION ITEMS, dan ARSIP adalah FAKTA yang sudah dicatat oleh sekretaris dari percakapan sebelumnya. Kamu WAJIB menggunakan data ini saat menjawab pertanyaan terkait. JANGAN PERNAH bilang "saya tidak tahu" atau "saya tidak punya informasi" jika datanya ada di konteks ini. Data ini adalah MEMORI PERMANEN kamu.`;
   }
 
   return context;
@@ -1359,7 +1380,7 @@ export async function registerRoutes(
       const status = req.query.status as string | undefined;
       const assignee = req.query.assignee as string | undefined;
       const allItems = await getActionItems({ status, assignee });
-      const filtered = status ? allItems : allItems.filter(i => i.status !== "cancelled");
+      const filtered = status ? allItems : allItems.filter(i => i.status !== "cancelled" && i.status !== "archived");
       return res.json({ items: filtered });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
@@ -1379,6 +1400,15 @@ export async function registerRoutes(
     try {
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       return res.json({ items: await getPendingActionItems() });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/action-items/archived", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      return res.json({ items: await getArchivedActionItems() });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -1986,7 +2016,15 @@ export async function registerRoutes(
       if (isOwner && requestedRoomId) {
         activeRoomId = requestedRoomId;
       } else if (isOwner && !requestedRoomId) {
-        roomActionPromise = detectRoomAction(message, userId);
+        const lastLobbyTime = await getLastLobbyMessageTime(userId);
+        const now = Date.now();
+        const cooldownMs = 3 * 60 * 1000;
+        const isWithinCooldown = lastLobbyTime && (now - lastLobbyTime.getTime()) < cooldownMs;
+        if (!isWithinCooldown) {
+          roomActionPromise = detectRoomAction(message, userId);
+        } else {
+          console.log(`Auto-room: cooldown active (last lobby msg ${Math.round((now - lastLobbyTime.getTime()) / 1000)}s ago), staying in lobby`);
+        }
       }
 
       const corePrompt = readPromptFile("DARVIS_CORE.md");
@@ -3042,6 +3080,13 @@ ATURAN:
 - Kalau pesan singkat, sapaan, basa-basi, tanya ringan → LOBBY
 - Lebih baik MOVE ke room existing daripada CREATE baru kalau topiknya mirip
 
+ATURAN KHUSUS — WAJIB LOBBY:
+- Kalau pesan berisi daftar bernomor (1., 2., 3... atau poin ke-1, poin ke-2) → LOBBY
+- Kalau pesan menyebut "poin", "point", "daftar", "list", "laporan", "report" dengan banyak item → LOBBY
+- Kalau pesan pendek yang kelihatan lanjutan dari pesan sebelumnya (misal hanya 1-2 kalimat follow-up) → LOBBY
+- Kalau pesan berisi multi-topik sekaligus (membahas beberapa hal dalam satu pesan) → LOBBY
+- Lebih baik LOBBY daripada MOVE/CREATE kalau ragu
+
 Jawab HANYA dalam format JSON (tanpa markdown):
 {"action": "move" | "create" | "lobby", "roomId": <number kalau move, null kalau bukan>, "title": "<judul room baru kalau create, null kalau bukan>", "reason": "<alasan singkat>"}`;
 
@@ -3240,9 +3285,16 @@ RULES:
 - Untuk nama tim member, gunakan nama yang disebutkan (contoh: "Andi", "Sari", bukan "dia" atau "orang itu")
 - Jika ada nama yang sudah tercatat di konteks, UPDATE info-nya alih-alih buat entri baru
 - Untuk meeting, WAJIB parsing tanggal/waktu dari bahasa natural ke format YYYY-MM-DD HH:MM
-- Untuk action items: tangkap instruksi, delegasi, tugas, follow-up yang disebut. Parsing deadline dari bahasa natural.
-- Untuk projects: tangkap project baru atau update status project existing. Parsing deadline dari bahasa natural.
-- follow_ups: tangkap hal-hal yang user bilang "nanti gw..." atau "besok mau..." sebagai reminder. Parsing deadline_hint ke tanggal konkret.
+- Untuk action items: HANYA tangkap jika user EKSPLISIT minta dicatat (keyword trigger) ATAU ada delegasi tugas jelas ke orang tertentu. JANGAN tangkap topik diskusi umum, brainstorming, atau pertanyaan sebagai action item.
+- Untuk projects: tangkap project baru atau UPDATE status/progress project existing. Jika user menyebut persentase progress (misal "NM Apps udah 90%", "SGB Mini baru 5%"), WAJIB update progress project tersebut. Parsing deadline dari bahasa natural.
+- follow_ups: HANYA tangkap jika user bilang "nanti gw..." atau "besok mau..." dengan KOMITMEN JELAS. Jangan tangkap pembicaraan biasa.
+
+RULE KUALITAS ACTION ITEM (WAJIB):
+- Title HARUS deskriptif dan lengkap, BUKAN hanya subjek. Sertakan konteks: siapa, apa, kenapa.
+  BURUK: "Follow up Andi" | BAGUS: "Follow up Andi soal progress testing NM Apps — pastikan deadline minggu ini tercapai"
+  BURUK: "Cek laporan" | BAGUS: "Cek laporan keuangan Q1 BPF — verifikasi angka revenue sebelum meeting direksi"
+- Notes HARUS berisi konteks dari percakapan yang relevan (apa yang dibahas, keputusan apa yang mendasari)
+- JANGAN buat action item dari pembahasan/diskusi biasa. Hanya dari INSTRUKSI atau PERMINTAAN EKSPLISIT.
 - PENTING: Jika user menyebut nama orang dan memberikan info tentang orang tersebut (siapa dia, posisi, relasi, karakter, gaya kerja, dll), SELALU ekstrak ke team_members. Cek daftar existing — jika nama/alias cocok, UPDATE. Jika baru, buat entri baru.
 - PERSONA FIELDS (tangkap kalau ada info relevan):
   - work_style: cara kerja orang ini (misal: "detail-oriented, perfeksionis", "big picture thinker", "cepat tapi sering miss detail")
@@ -3461,15 +3513,33 @@ Respond ONLY with valid JSON, no other text.`;
 
     if (Array.isArray(parsed.action_items) && parsed.action_items.length > 0) {
       const existingActions = await getPendingActionItems();
-      const seenActionKeys = new Set(existingActions.map(ea => ea.title.toLowerCase()));
+      const existingTitles = existingActions.map(ea => ea.title.toLowerCase());
+      const seenActionKeys = new Set(existingTitles);
+      const isFuzzyDuplicate = (newTitle: string): boolean => {
+        const lower = newTitle.toLowerCase();
+        for (const existing of existingTitles) {
+          if (existing === lower) return true;
+          if (existing.includes(lower) || lower.includes(existing)) return true;
+          const words1 = lower.split(/\s+/).filter(w => w.length > 3);
+          const words2 = existing.split(/\s+/).filter(w => w.length > 3);
+          if (words1.length > 0 && words2.length > 0) {
+            const overlap = words1.filter(w => words2.includes(w)).length;
+            const similarity = overlap / Math.max(words1.length, words2.length);
+            if (similarity >= 0.6) return true;
+          }
+        }
+        for (const seen of seenActionKeys) {
+          if (seen === lower || seen.includes(lower) || lower.includes(seen)) return true;
+        }
+        return false;
+      };
       for (const item of parsed.action_items.slice(0, 5)) {
         if (item.title && typeof item.title === "string") {
-          const actionKey = item.title.toLowerCase();
-          if (seenActionKeys.has(actionKey)) {
-            console.log(`Secretary: skipping duplicate action item "${item.title}"`);
+          if (isFuzzyDuplicate(item.title)) {
+            console.log(`Secretary: skipping fuzzy-duplicate action item "${item.title}"`);
             continue;
           }
-          seenActionKeys.add(actionKey);
+          seenActionKeys.add(item.title.toLowerCase());
           const actionId = await createActionItem({
             title: item.title,
             assignee: item.assignee || null,
