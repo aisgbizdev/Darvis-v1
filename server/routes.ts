@@ -1842,10 +1842,16 @@ export async function registerRoutes(
         const newRoomId = await createChatRoom(userId, roomTitle || "Obrolan Baru");
         await copyMessagesToRoom(userId, newRoomId, 5);
         console.log(`Room approval: created room #${newRoomId}: "${roomTitle}" — lobby messages COPIED`);
+        generateRoomSummary(newRoomId, userId, true).catch(err => {
+          console.error(`Room summary generation failed for #${newRoomId}:`, err?.message);
+        });
         return res.json({ success: true, roomId: newRoomId });
       } else if (action === "move_to_existing" && roomId) {
         await copyMessagesToRoom(userId, roomId, 5);
         console.log(`Room approval: copied lobby messages to room #${roomId}`);
+        generateRoomSummary(roomId, userId, true).catch(err => {
+          console.error(`Room summary generation failed for #${roomId}:`, err?.message);
+        });
         return res.json({ success: true, roomId });
       }
       return res.status(400).json({ message: "Invalid action" });
@@ -3352,9 +3358,10 @@ Jawab HANYA dalam format JSON (tanpa markdown):
   }
 }
 
-async function generateRoomSummary(roomId: number, userId: string) {
+async function generateRoomSummary(roomId: number, userId: string, force: boolean = false) {
   const allMessages = await getAllMessagesForRoom(roomId);
-  if (allMessages.length < 10) return;
+  if (!force && allMessages.length < 10) return;
+  if (allMessages.length === 0) return;
 
   const last30 = allMessages.slice(-30);
   const conversationText = last30
@@ -3376,7 +3383,7 @@ async function generateRoomSummary(roomId: number, userId: string) {
   const summaryText = completion.choices[0]?.message?.content?.trim();
   if (summaryText) {
     await setRoomSummary(roomId, summaryText);
-    console.log(`Auto-summary generated for room ${roomId} (${allMessages.length} messages)`);
+    console.log(`Auto-summary generated for room ${roomId} (${allMessages.length} messages, force=${force})`);
   }
 }
 
