@@ -3018,8 +3018,10 @@ GAYA NGOBROL:
         }
 
         let extractionResult: { savedItems: Array<{type: string, title: string}>, pendingCount: number } | null = null;
-        if (isOwner) {
-          console.log("Pre-done: calling extractSecretaryData NOW (hybrid mode)");
+        const hasExplicitKeyword = /\b(catat|catet|meeting|jadwal|ingetin|remind|todo|action\s*item|tugas|deadline|simpan|record|note)\b/i.test(message);
+        const isSubstantiveContext = contextMode === "strategic" || contextMode === "tactical" || contextMode === "crisis";
+        if (isOwner && (hasExplicitKeyword || isSubstantiveContext)) {
+          console.log(`Pre-done: extractSecretaryData (explicit=${hasExplicitKeyword}, context=${contextMode})`);
           const recentMsgs = activeRoomId
             ? await getLastMessagesForRoom(activeRoomId, 12)
             : await getLastMessages(userId, 12);
@@ -3036,6 +3038,8 @@ GAYA NGOBROL:
           } catch (err: any) {
             console.error("Secretary extraction error (non-blocking):", err?.message || err);
           }
+        } else if (isOwner) {
+          console.log(`Pre-done: skipping extraction (context=${contextMode}, no explicit keyword)`);
         }
 
         const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: reply };

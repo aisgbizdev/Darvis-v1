@@ -65,6 +65,12 @@ DARVIS utilizes a modern web architecture.
     - Secretary Knowledge Injection (v2.1): All secretary data feeds DARVIS context with mandatory usage instruction.
     - Project editing: progress slider, status dropdown, milestones, deadline, description, notes.
     - Fuzzy deduplication for action items. Stricter extraction rules (only explicit requests/delegations).
+- **Mirror Mode Refinements (v2.3)**:
+    - Notulen format only activates on explicit user request or after 5+ substantive turns (not by default).
+    - Bottom-of-chat cards prioritized: only 1 card at a time (room suggestion takes priority over pending card).
+    - Implicit secretary extraction gated: only runs in strategic/tactical/crisis context modes or when explicit keywords detected. General context skipped to reduce noise.
+    - Dashboard Secretary shortcut icon added directly to header (1-click access) with pending badge.
+    - Voice conversation mode indicator text shows feature limitations ("respons dipersingkat, tanpa node konteks").
 
 ## External Dependencies
 - **OpenAI API**: Used for AI model inference (GPT-5, GPT-4o-mini).

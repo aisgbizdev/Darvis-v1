@@ -1277,6 +1277,23 @@ export default function ChatPage() {
           {isOwner && (
             <>
               <NotificationCenter />
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowDashboard(!showDashboard)}
+                  className={`toggle-elevate ${showDashboard ? "toggle-elevated" : ""}`}
+                  data-testid="button-dashboard-shortcut"
+                  title="Dashboard Secretary"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                </Button>
+                {pendingSecretaryCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1 pointer-events-none" data-testid="badge-dashboard-pending">
+                    {pendingSecretaryCount}
+                  </span>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1800,7 +1817,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          {!isStreaming && pendingSecretaryCount > 0 && isOwner && (
+          {!isStreaming && !roomSuggestion && pendingSecretaryCount > 0 && isOwner && (
             <div className="flex justify-start pl-1 mt-2" data-testid="container-secretary-pending">
               <div className="bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg p-3 max-w-sm">
                 <div className="flex items-center gap-2 mb-2">
@@ -1829,7 +1846,7 @@ export default function ChatPage() {
           <div className="max-w-2xl mx-auto mb-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 dark:bg-primary/20" data-testid="status-conversation-mode">
             <Phone className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="text-xs text-primary flex-1">
-              {ttsPlaying ? "DARVIS sedang bicara..." : isStreaming ? "DARVIS sedang mikir..." : isListening ? "Mendengarkan... diam 2.5 detik untuk kirim otomatis" : "Mode Percakapan aktif"}
+              {ttsPlaying ? "DARVIS sedang bicara..." : isStreaming ? "DARVIS sedang mikir..." : isListening ? "Mendengarkan... diam 2.5 detik untuk kirim otomatis" : "Mode Percakapan aktif — respons dipersingkat, tanpa node konteks"}
             </span>
             {ttsPlaying && (
               <Button size="icon" variant="ghost" onClick={stopTts} className="h-6 w-6" data-testid="button-stop-tts">
