@@ -193,7 +193,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   gaya_bahasa: "Gaya Bahasa",
 };
 
-function parseSSELine(line: string): { type: string; content?: string; nodeUsed?: string | null; contextMode?: string | null; fullReply?: string; message?: string; retryable?: boolean; roomSuggestion?: { action: string; roomId?: number; roomTitle?: string; reason?: string }; pendingSecretaryCount?: number } | null {
+function parseSSELine(line: string): { type: string; content?: string; nodeUsed?: string | null; contextMode?: string | null; fullReply?: string; message?: string; retryable?: boolean; roomSuggestion?: { action: string; roomId?: number; roomTitle?: string; reason?: string }; pendingSecretaryCount?: number; savedItems?: Array<{ type: string; title: string }> } | null {
   if (!line.startsWith("data: ")) return null;
   try {
     return JSON.parse(line.slice(6));
@@ -748,6 +748,7 @@ export default function ChatPage() {
 
   const sendMessage = useCallback(async (payload: { message: string; images?: string[] }, retryCount = 0) => {
     setIsStreaming(true);
+    setRoomSuggestion(null);
     if (retryCount === 0) setStreamingContent("");
     const MAX_RETRIES = 2;
 
@@ -831,10 +832,21 @@ export default function ChatPage() {
               pendingTtsRef.current = finalContent;
             }
             if (parsed.roomSuggestion) {
+              console.log("Room suggestion received:", parsed.roomSuggestion);
               setRoomSuggestion(parsed.roomSuggestion);
             }
             if (parsed.pendingSecretaryCount && parsed.pendingSecretaryCount > 0) {
               setPendingSecretaryCount(parsed.pendingSecretaryCount);
+            }
+            if (parsed.savedItems && parsed.savedItems.length > 0) {
+              const typeLabels: Record<string, string> = { meeting: "Meeting", action_item: "Action Item", project: "Project Baru", project_update: "Update Project" };
+              if (parsed.savedItems.length === 1) {
+                const item = parsed.savedItems[0];
+                toast({ title: `✓ ${typeLabels[item.type] || item.type}: ${item.title}`, description: "Langsung disimpan ke dashboard", duration: 4000 });
+              } else {
+                const lines = parsed.savedItems.map((item: { type: string; title: string }) => `• ${typeLabels[item.type] || item.type}: ${item.title}`).join("\n");
+                toast({ title: `✓ ${parsed.savedItems.length} item dicatat`, description: lines, duration: 5000 });
+              }
             }
           } else if (parsed.type === "error") {
             cleanup();
@@ -893,7 +905,24 @@ export default function ChatPage() {
         playTts(ttsText);
       }
     }
-  }, [scrollToBottom, playTts]);
+  }, [scrollToBottom, playTts, toast]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    const fetchPendingCount = () => {
+      fetch("/api/secretary/pending/count", { credentials: "include" })
+        .then(r => r.json())
+        .then(data => {
+          if (typeof data.count === "number") {
+            setPendingSecretaryCount(data.count);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [isOwner]);
 
   useEffect(() => {
     vadSendRef.current = (text: string) => {

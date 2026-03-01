@@ -46,16 +46,19 @@ DARVIS utilizes a modern web architecture.
 - **Secretary System (v2.0, Mirror Mode)**: Manages team members, meetings, action items, and projects.
     - Includes `team_members` with aliases and categories, `meetings`, `action_items`, `projects`, `notifications`, `secretary_pending`.
     - Features a seeded people database, alias resolution, auto-detection of new names, and GPT-powered extraction of secretary data from conversations.
-    - **Approval-Based Extraction (v2.1)**: Meetings, action items, and projects go to `secretary_pending` table first. User reviews and approves/rejects via inline SecretaryReview modal before saving to real tables. Team members still auto-save.
+    - **Hybrid Extraction (v2.2)**: Explicit requests (keyword trigger like "catat", "meeting", "ingetin") → direct save to real tables + toast confirmation. Implicit extraction (from conversation context) → `secretary_pending` table for user review. Team members and existing project updates still auto-save.
+    - **Extraction Timing (v2.2)**: `extractSecretaryData` runs BEFORE donePayload (with 8s timeout), so `pendingSecretaryCount` is accurate in real-time. Multi-turn context (10 turns) for better extraction.
+    - **Fuzzy Project Matching (v2.2)**: Project names matched with word overlap ≥60% fallback. GPT instructed to use exact existing project names.
     - Dynamic context injection for secretary nodes (`NODE_TEAM`, `NODE_MEETING`, `NODE_PROJECTS`).
     - **Expired Items Notification (v2.1)**: Overdue items and past meetings trigger `expired_review` notifications. User decides Keep or Hapus — no auto-archive.
+    - **Pending Visibility (v2.2)**: Frontend polls pending count every 30s. Badge always visible. Bulk approve/reject available.
     - Proactive notifications for meetings and deadlines.
     - All date/time operations use `Asia/Jakarta` (WIB).
     - Team Persona Profiling (v2.0): Extracts work style, communication style, etc., from conversations.
     - Multi-select batch delete for meetings and action items.
 - **Conversation Rooms (v2.0, Owner-only)**: Organizes chat history by topic while maintaining global context.
     - `chat_rooms` table with API for management.
-    - "Lobby" for default free-chat, with **approval-based room suggestion** (v2.1): system suggests room, user approves, messages are COPIED (not moved) to room. Lobby stays intact.
+    - "Lobby" for default free-chat, with **approval-based room suggestion** (v2.1): system suggests room, user approves, messages are COPIED (not moved) to room. Lobby stays intact. Cooldown 1 minute between suggestions. detectRoomAction prompt prioritizes MOVE > CREATE > LOBBY for substantive topics.
     - Supports room merging.
     - Key design: global shared preferences and secretary data across all rooms.
     - Smart Room Context: injects relevant history or summary when entering a room.

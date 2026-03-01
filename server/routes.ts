@@ -2279,7 +2279,7 @@ export async function registerRoutes(
       } else if (isOwner && !requestedRoomId) {
         const lastLobbyTime = await getLastLobbyMessageTime(userId);
         const now = Date.now();
-        const cooldownMs = 3 * 60 * 1000;
+        const cooldownMs = 1 * 60 * 1000;
         const isWithinCooldown = lastLobbyTime && (now - lastLobbyTime.getTime()) < cooldownMs;
         if (!isWithinCooldown) {
           roomActionPromise = detectRoomAction(message, userId);
@@ -2998,40 +2998,12 @@ GAYA NGOBROL:
           if (!isOwner) {
             reply = mergePersonasToUnifiedVoice(reply);
           }
-          if (roomActionPromise) {
-            try { roomActionResult = await roomActionPromise; } catch (_e) { roomActionResult = null; }
-          }
-
-          const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: reply };
-          if (roomActionResult && isOwner && !activeRoomId && roomActionResult.action !== "stay_lobby") {
-            donePayload.roomSuggestion = roomActionResult;
-            console.log(`Room suggestion (not auto-moved): ${JSON.stringify(roomActionResult)}`);
-          }
-          if (isOwner) {
-            try { donePayload.pendingSecretaryCount = await getSecretaryPendingCount(userId); } catch (_) {}
-          }
-          res.write(`data: ${JSON.stringify(donePayload)}\n\n`);
         } else {
           reply = enforceFormat(fullReply, isMultiPersonaMode);
           if (!isOwner) {
             reply = mergePersonasToUnifiedVoice(reply);
           }
-
-          if (roomActionPromise) {
-            try { roomActionResult = await roomActionPromise; } catch (_e) { roomActionResult = null; }
-          }
-
-          const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: (!isOwner || isContributor) ? reply : undefined };
-          if (roomActionResult && isOwner && !activeRoomId && roomActionResult.action !== "stay_lobby") {
-            donePayload.roomSuggestion = roomActionResult;
-            console.log(`Room suggestion (not auto-moved): ${JSON.stringify(roomActionResult)}`);
-          }
-          if (isOwner) {
-            try { donePayload.pendingSecretaryCount = await getSecretaryPendingCount(userId); } catch (_) {}
-          }
-          res.write(`data: ${JSON.stringify(donePayload)}\n\n`);
         }
-        res.end();
 
         if (activeRoomId) {
           await saveMessageToRoom(activeRoomId, userId, "user", message);
@@ -3040,6 +3012,45 @@ GAYA NGOBROL:
           await saveMessage(userId, "user", message);
           await saveMessage(userId, "assistant", reply);
         }
+
+        if (roomActionPromise) {
+          try { roomActionResult = await roomActionPromise; } catch (_e) { roomActionResult = null; }
+        }
+
+        let extractionResult: { savedItems: Array<{type: string, title: string}>, pendingCount: number } | null = null;
+        if (isOwner) {
+          console.log("Pre-done: calling extractSecretaryData NOW (hybrid mode)");
+          const recentMsgs = activeRoomId
+            ? await getLastMessagesForRoom(activeRoomId, 12)
+            : await getLastMessages(userId, 12);
+          const recentHistory = recentMsgs.map((m: any) => ({ role: m.role as string, content: m.content as string }));
+          try {
+            const extractionTimeout = new Promise<{ savedItems: Array<{type: string, title: string}>, pendingCount: number }>((_, reject) =>
+              setTimeout(() => reject(new Error("Extraction timeout (8s)")), 8000)
+            );
+            extractionResult = await Promise.race([
+              extractSecretaryData(message, reply, recentHistory, userId),
+              extractionTimeout
+            ]);
+            console.log("Pre-done: extractSecretaryData completed —", JSON.stringify(extractionResult));
+          } catch (err: any) {
+            console.error("Secretary extraction error (non-blocking):", err?.message || err);
+          }
+        }
+
+        const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: reply };
+        if (roomActionResult && isOwner && !activeRoomId && roomActionResult.action !== "stay_lobby") {
+          donePayload.roomSuggestion = roomActionResult;
+          console.log(`Room suggestion (not auto-moved): ${JSON.stringify(roomActionResult)}`);
+        }
+        if (isOwner) {
+          try { donePayload.pendingSecretaryCount = await getSecretaryPendingCount(userId); } catch (_) {}
+        }
+        if (extractionResult && extractionResult.savedItems.length > 0) {
+          donePayload.savedItems = extractionResult.savedItems;
+        }
+        res.write(`data: ${JSON.stringify(donePayload)}\n\n`);
+        res.end();
 
         try {
           const toneSignalsForTag: string[] = [];
@@ -3088,21 +3099,6 @@ GAYA NGOBROL:
 
         const msgCount = activeRoomId ? await getMessageCountForRoom(activeRoomId) : await getMessageCount(userId);
         console.log(`Post-chat: isOwner=${isOwner}, isContributor=${isContributor}, msgLen=${message.length}, replyLen=${reply.length}`);
-        if (isOwner) {
-          console.log("Post-chat: calling extractSecretaryData NOW (approval mode)");
-          const recentMsgs = activeRoomId
-            ? await getLastMessagesForRoom(activeRoomId, 6)
-            : await getLastMessages(userId, 6);
-          const recentHistory = recentMsgs.map((m: any) => ({ role: m.role as string, content: m.content as string }));
-          extractSecretaryData(message, reply, recentHistory, userId).then(async () => {
-            console.log("Post-chat: extractSecretaryData completed successfully (pending mode)");
-          }).catch((err) => {
-            console.error("Secretary extraction error:", err?.message || err);
-            if (err?.stack) console.error("Secretary extraction call stack:", err.stack.split("\n").slice(0, 5).join("\n"));
-          });
-        } else {
-          console.log("Post-chat: skipping extraction (not owner)");
-        }
 
         if (msgCount > 0 && msgCount % 20 === 0) {
           if (activeRoomId) {
@@ -3321,12 +3317,13 @@ ATURAN:
 - Kalau pesan singkat, sapaan, basa-basi, tanya ringan → LOBBY
 - Lebih baik MOVE ke room existing daripada CREATE baru kalau topiknya mirip
 
-ATURAN KHUSUS — WAJIB LOBBY:
-- Kalau pesan berisi daftar bernomor (1., 2., 3... atau poin ke-1, poin ke-2) → LOBBY
-- Kalau pesan menyebut "poin", "point", "daftar", "list", "laporan", "report" dengan banyak item → LOBBY
-- Kalau pesan pendek yang kelihatan lanjutan dari pesan sebelumnya (misal hanya 1-2 kalimat follow-up) → LOBBY
-- Kalau pesan berisi multi-topik sekaligus (membahas beberapa hal dalam satu pesan) → LOBBY
-- Lebih baik LOBBY daripada MOVE/CREATE kalau ragu
+ATURAN KHUSUS:
+- Kalau pesan singkat (1-2 kalimat), sapaan, atau basa-basi → LOBBY
+- Kalau pesan follow-up singkat dari pesan sebelumnya → LOBBY
+- Kalau pesan substantif dan JELAS berhubungan dengan topik room yang ada → MOVE
+- Kalau pesan substantif tapi topik baru yang belum ada room-nya → CREATE
+- Kalau pesan berisi multi-topik sekaligus → LOBBY (terlalu beragam untuk satu room)
+- Prioritas: MOVE > CREATE > LOBBY (kalau topik jelas substantif, jangan default ke LOBBY)
 
 Jawab HANYA dalam format JSON (tanpa markdown):
 {"action": "move" | "create" | "lobby", "roomId": <number kalau move, null kalau bukan>, "title": "<judul room baru kalau create, null kalau bukan>", "reason": "<alasan singkat>"}`;
@@ -3471,11 +3468,12 @@ RULES:
   }
 }
 
-async function extractSecretaryData(userMessage: string, assistantReply: string, recentHistory: Array<{role: string, content: string}> = [], userId: string = "mas_dr") {
-  console.log(`extractSecretaryData: ENTERED (approval mode) — userMsg=${userMessage.substring(0, 80)}...`);
+async function extractSecretaryData(userMessage: string, assistantReply: string, recentHistory: Array<{role: string, content: string}> = [], userId: string = "mas_dr"): Promise<{ savedItems: Array<{type: string, title: string}>, pendingCount: number }> {
+  console.log(`extractSecretaryData: ENTERED (hybrid mode) — userMsg=${userMessage.substring(0, 80)}...`);
+  const result: { savedItems: Array<{type: string, title: string}>, pendingCount: number } = { savedItems: [], pendingCount: 0 };
   let combinedText = "";
   if (recentHistory.length > 0) {
-    const filtered = recentHistory.slice(-6).filter(m => m.content !== userMessage && m.content !== assistantReply);
+    const filtered = recentHistory.slice(-10).filter(m => m.content !== userMessage && m.content !== assistantReply);
     if (filtered.length > 0) {
       const historyLines = filtered.map(m => `${m.role === "user" ? "User" : "DARVIS"}: ${m.content}`);
       combinedText = historyLines.join("\n\n") + "\n\n";
@@ -3513,26 +3511,36 @@ Ekstrak dalam format JSON dengan struktur:
     { "name": "string", "position": "string|null", "strengths": "string|null", "weaknesses": "string|null", "responsibilities": "string|null", "notes": "string|null", "aliases": "comma-separated aliases|null", "category": "team|direksi|family|external|management", "work_style": "string|null", "communication_style": "string|null", "triggers": "string|null", "commitments": "string|null", "personality_notes": "string|null" }
   ],
   "meetings": [
-    { "title": "string", "date_time": "YYYY-MM-DD HH:MM|null", "participants": "comma-separated names|null", "agenda": "string|null", "notify": true }
+    { "title": "string", "date_time": "YYYY-MM-DD HH:MM|null", "participants": "comma-separated names|null", "agenda": "string|null", "notify": true, "explicit": true }
   ],
   "action_items": [
-    { "title": "string", "assignee": "string|null", "deadline": "YYYY-MM-DD|null", "priority": "low|medium|high|urgent", "source": "conversation", "notes": "string|null", "notify": false }
+    { "title": "string", "assignee": "string|null", "deadline": "YYYY-MM-DD|null", "priority": "low|medium|high|urgent", "source": "conversation", "notes": "string|null", "notify": false, "explicit": true }
   ],
   "projects": [
-    { "name": "string", "description": "string|null", "pic": "string|null", "status": "planning|active|on_hold|completed|cancelled", "milestones": "string|null", "deadline": "YYYY-MM-DD|null", "progress": 0, "notes": "string|null" }
+    { "name": "string", "description": "string|null", "pic": "string|null", "status": "planning|active|on_hold|completed|cancelled", "milestones": "string|null", "deadline": "YYYY-MM-DD|null", "progress": 0, "notes": "string|null", "explicit": true }
   ],
   "follow_ups": [
     { "text": "string", "deadline_hint": "string|null" }
   ]
 }
 
+FIELD "explicit" (SANGAT PENTING):
+- explicit = true → user SECARA LANGSUNG minta dicatat/diingatkan (pakai keyword trigger atau perintah jelas)
+- explicit = false → info dari KONTEKS percakapan (disebutkan tapi tidak diminta dicatat)
+- Contoh explicit=true: "catat meeting besok jam 10", "ingetin gw meeting", "tambahin project X", "jangan lupa follow up"
+- Contoh explicit=false: "kemarin gw ketemu Pak Tirta, bahas soal...", "progress NM Apps udah 80%", "besok ada meeting" (tanpa minta dicatat)
+
 RULES:
-- Hanya ekstrak informasi yang JELAS disebutkan dalam percakapan, jangan berasumsi
+- Ekstrak informasi yang JELAS disebutkan dalam percakapan, jangan berasumsi
 - Untuk nama tim member, gunakan nama yang disebutkan (contoh: "Andi", "Sari", bukan "dia" atau "orang itu")
 - Jika ada nama yang sudah tercatat di konteks, UPDATE info-nya alih-alih buat entri baru
 - Untuk meeting, WAJIB parsing tanggal/waktu dari bahasa natural ke format YYYY-MM-DD HH:MM
-- Untuk action items: HANYA tangkap jika user EKSPLISIT minta dicatat (keyword trigger) ATAU ada delegasi tugas jelas ke orang tertentu. JANGAN tangkap topik diskusi umum, brainstorming, atau pertanyaan sebagai action item.
+- Untuk action items:
+  * explicit=true: user EKSPLISIT minta dicatat (keyword trigger) ATAU ada delegasi tugas jelas ke orang tertentu
+  * explicit=false: poin pembahasan substantif, komitmen, atau keputusan dari percakapan (TANGKAP ini juga — biar user bisa review)
+  * JANGAN tangkap basa-basi, sapaan, atau pertanyaan umum sebagai action item
 - Untuk projects: tangkap project baru atau UPDATE status/progress project existing. Jika user menyebut persentase progress (misal "NM Apps udah 90%", "SGB Mini baru 5%"), WAJIB update progress project tersebut. Parsing deadline dari bahasa natural.
+  * WAJIB pakai nama project PERSIS seperti di daftar "Project yang sudah tercatat" di atas. JANGAN buat variasi nama.
 - follow_ups: HANYA tangkap jika user bilang "nanti gw..." atau "besok mau..." dengan KOMITMEN JELAS. Jangan tangkap pembicaraan biasa.
 
 ANTI-DUPLIKASI (SANGAT PENTING):
@@ -3744,14 +3752,22 @@ Respond ONLY with valid JSON, no other text.`;
             continue;
           }
           seenThisBatch.add(batchKey);
-          await createSecretaryPending(userId, "meeting", {
+          const meetingData = {
             title: meeting.title,
             date_time: dateTime,
             participants: meeting.participants || null,
             agenda: meeting.agenda || null,
             notify: meeting.notify === true,
-          });
-          console.log(`Secretary: pending meeting "${meeting.title}" (awaiting approval)`);
+          };
+          if (meeting.explicit === true) {
+            await createMeeting(meetingData);
+            result.savedItems.push({ type: "meeting", title: meeting.title });
+            console.log(`Secretary: DIRECT SAVED meeting "${meeting.title}" (explicit request)`);
+          } else {
+            await createSecretaryPending(userId, "meeting", meetingData);
+            result.pendingCount++;
+            console.log(`Secretary: pending meeting "${meeting.title}" (awaiting approval)`);
+          }
         }
       }
     }
@@ -3793,38 +3809,76 @@ Respond ONLY with valid JSON, no other text.`;
             continue;
           }
           seenActionKeys.add(item.title.toLowerCase());
-          await createSecretaryPending(userId, "action_item", {
+          const actionData = {
             title: item.title,
             assignee: item.assignee || null,
             deadline: item.deadline || null,
             priority: item.priority || "medium",
-            source: "conversation",
+            source: "conversation" as const,
             notes: item.notes || null,
             notify: item.notify === true,
-          });
-          console.log(`Secretary: pending action item "${item.title}" (awaiting approval)`);
+          };
+          if (item.explicit === true) {
+            await createActionItem(actionData);
+            result.savedItems.push({ type: "action_item", title: item.title });
+            console.log(`Secretary: DIRECT SAVED action item "${item.title}" (explicit request)`);
+          } else {
+            await createSecretaryPending(userId, "action_item", actionData);
+            result.pendingCount++;
+            console.log(`Secretary: pending action item "${item.title}" (awaiting approval)`);
+          }
         }
       }
     }
 
     if (Array.isArray(parsed.projects) && parsed.projects.length > 0) {
+      const fuzzyMatchProject = (extractedName: string): typeof existingProjects[0] | null => {
+        const lower = extractedName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+        const exact = existingProjects.find(p => p.name.toLowerCase() === lower);
+        if (exact) return exact;
+        const extractedWords = lower.split(/\s+/).filter(w => w.length > 1);
+        let bestMatch: typeof existingProjects[0] | null = null;
+        let bestScore = 0;
+        for (const ep of existingProjects) {
+          const epLower = ep.name.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          if (epLower.includes(lower) || lower.includes(epLower)) return ep;
+          const epWords = epLower.split(/\s+/).filter(w => w.length > 1);
+          if (extractedWords.length > 0 && epWords.length > 0) {
+            const overlap = extractedWords.filter(w => epWords.includes(w)).length;
+            const similarity = overlap / Math.min(extractedWords.length, epWords.length);
+            if (similarity > bestScore && similarity >= 0.6) {
+              bestScore = similarity;
+              bestMatch = ep;
+            }
+          }
+        }
+        return bestMatch;
+      };
       for (const project of parsed.projects.slice(0, 5)) {
         if (project.name && typeof project.name === "string") {
-          const existingProject = existingProjects.find(p => p.name.toLowerCase() === project.name.toLowerCase());
-          if (existingProject && project.progress && project.progress !== existingProject.progress) {
-            await upsertProject({
-              name: project.name,
-              description: project.description || existingProject.description || null,
-              pic: project.pic || existingProject.pic || null,
-              status: project.status || existingProject.status || "active",
-              milestones: project.milestones || existingProject.milestones || null,
-              deadline: project.deadline || existingProject.deadline || null,
-              progress: project.progress || existingProject.progress || 0,
-              notes: project.notes || existingProject.notes || null,
-            });
-            console.log(`Secretary: auto-updated project "${project.name}" progress to ${project.progress}%`);
-          } else if (!existingProject) {
-            await createSecretaryPending(userId, "project", {
+          const existingProject = fuzzyMatchProject(project.name);
+          if (existingProject) {
+            const hasUpdate = (project.progress && project.progress !== existingProject.progress) ||
+              (project.status && project.status !== existingProject.status) ||
+              (project.description && project.description !== existingProject.description) ||
+              (project.notes && project.notes !== existingProject.notes) ||
+              (project.milestones && project.milestones !== existingProject.milestones);
+            if (hasUpdate) {
+              await upsertProject({
+                name: existingProject.name,
+                description: project.description || existingProject.description || null,
+                pic: project.pic || existingProject.pic || null,
+                status: project.status || existingProject.status || "active",
+                milestones: project.milestones || existingProject.milestones || null,
+                deadline: project.deadline || existingProject.deadline || null,
+                progress: project.progress || existingProject.progress || 0,
+                notes: project.notes || existingProject.notes || null,
+              });
+              result.savedItems.push({ type: "project_update", title: existingProject.name });
+              console.log(`Secretary: auto-updated project "${existingProject.name}" (matched from "${project.name}")`);
+            }
+          } else {
+            const projectData = {
               name: project.name,
               description: project.description || null,
               pic: project.pic || null,
@@ -3833,8 +3887,16 @@ Respond ONLY with valid JSON, no other text.`;
               deadline: project.deadline || null,
               progress: project.progress || 0,
               notes: project.notes || null,
-            });
-            console.log(`Secretary: pending new project "${project.name}" (awaiting approval)`);
+            };
+            if (project.explicit === true) {
+              await upsertProject(projectData);
+              result.savedItems.push({ type: "project", title: project.name });
+              console.log(`Secretary: DIRECT SAVED new project "${project.name}" (explicit request)`);
+            } else {
+              await createSecretaryPending(userId, "project", projectData);
+              result.pendingCount++;
+              console.log(`Secretary: pending new project "${project.name}" (awaiting approval)`);
+            }
           }
         }
       }
@@ -3855,6 +3917,7 @@ Respond ONLY with valid JSON, no other text.`;
             priority: "medium",
             source: "follow-up dari percakapan",
           });
+          result.pendingCount++;
           console.log(`Secretary: pending follow-up "${fu.text}" (awaiting approval)`);
         }
       }
@@ -3863,10 +3926,11 @@ Respond ONLY with valid JSON, no other text.`;
     const totalExtracted = (parsed.team_members?.length || 0) + (parsed.meetings?.length || 0) +
       (parsed.action_items?.length || 0) + (parsed.projects?.length || 0) + (parsed.follow_ups?.length || 0);
     if (totalExtracted > 0) {
-      console.log(`Secretary extraction complete: ${totalExtracted} items extracted`);
+      console.log(`Secretary extraction complete: ${totalExtracted} items (saved=${result.savedItems.length}, pending=${result.pendingCount})`);
     }
   } catch (err: any) {
     console.error("Secretary extraction FAILED:", err?.message || err);
     if (err?.stack) console.error("Secretary extraction stack:", err.stack.split("\n").slice(0, 5).join("\n"));
   }
+  return result;
 }
