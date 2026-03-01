@@ -361,6 +361,8 @@ function MeetingTab() {
   const [addDateTime, setAddDateTime] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editDateTime, setEditDateTime] = useState("");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery<{ meetings: Meeting[] }>({
     queryKey: ["/api/meetings"],
@@ -399,7 +401,35 @@ function MeetingTab() {
     },
   });
 
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("POST", "/api/meetings/batch-delete", { ids });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      setSelected(new Set());
+      setSelectMode(false);
+    },
+  });
+
   const meetings = data?.meetings || [];
+
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === meetings.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(meetings.map((m) => m.id)));
+    }
+  };
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>;
@@ -407,11 +437,52 @@ function MeetingTab() {
 
   return (
     <div className="flex flex-col gap-2 px-3 pb-3">
+      {meetings.length > 0 && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[10px] text-muted-foreground"
+            onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+            data-testid="button-toggle-select-meetings"
+          >
+            {selectMode ? <X className="w-3 h-3 mr-1" /> : <CheckSquare className="w-3 h-3 mr-1" />}
+            {selectMode ? "Batal" : "Pilih"}
+          </Button>
+          {selectMode && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[10px] text-muted-foreground"
+                onClick={toggleSelectAll}
+                data-testid="button-select-all-meetings"
+              >
+                {selected.size === meetings.length ? "Batal Semua" : "Pilih Semua"}
+              </Button>
+              {selected.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-[10px]"
+                  onClick={() => batchDeleteMutation.mutate(Array.from(selected))}
+                  disabled={batchDeleteMutation.isPending}
+                  data-testid="button-batch-delete-meetings"
+                >
+                  {batchDeleteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                  Hapus {selected.size}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {meetings.length === 0 && !showAdd && (
         <p className="text-xs text-muted-foreground text-center py-6" data-testid="text-empty-meetings">Belum ada meeting</p>
       )}
       {meetings.map((m) => (
-        <Card key={m.id} className="p-2.5" data-testid={`card-meeting-${m.id}`}>
+        <Card key={m.id} className={`p-2.5 ${selectMode && selected.has(m.id) ? "ring-1 ring-primary bg-primary/5" : ""}`} data-testid={`card-meeting-${m.id}`}>
           {editId === m.id ? (
             <div className="flex flex-col gap-1.5">
               <Input
@@ -445,7 +516,12 @@ function MeetingTab() {
             </div>
           ) : (
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
+              {selectMode && (
+                <button onClick={() => toggleSelect(m.id)} className="mt-0.5 shrink-0" data-testid={`checkbox-meeting-${m.id}`}>
+                  {selected.has(m.id) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
+                </button>
+              )}
+              <div className="min-w-0 flex-1" onClick={() => selectMode && toggleSelect(m.id)}>
                 <p className="text-xs font-medium truncate" data-testid={`text-meeting-title-${m.id}`}>{m.title}</p>
                 {m.date_time && (
                   <p className="text-[10px] text-muted-foreground" data-testid={`text-meeting-datetime-${m.id}`}>
@@ -454,27 +530,29 @@ function MeetingTab() {
                 )}
                 {m.participants && <p className="text-[10px] text-muted-foreground truncate" data-testid={`text-meeting-participants-${m.id}`}>{m.participants}</p>}
               </div>
-              <div className="flex gap-0.5 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => { setEditId(m.id); setEditTitle(m.title); setEditDateTime(m.date_time || ""); }}
-                  data-testid={`button-edit-meeting-${m.id}`}
-                >
-                  <Edit2 className="w-3 h-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => deleteMutation.mutate(m.id)}
-                  disabled={deleteMutation.isPending}
-                  data-testid={`button-delete-meeting-${m.id}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
+              {!selectMode && (
+                <div className="flex gap-0.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => { setEditId(m.id); setEditTitle(m.title); setEditDateTime(m.date_time || ""); }}
+                    data-testid={`button-edit-meeting-${m.id}`}
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => deleteMutation.mutate(m.id)}
+                    disabled={deleteMutation.isPending}
+                    data-testid={`button-delete-meeting-${m.id}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </Card>
@@ -532,6 +610,8 @@ function ActionItemsTab() {
   const [editTitle, setEditTitle] = useState("");
   const [editAssignee, setEditAssignee] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery<{ items: ActionItem[] }>({
     queryKey: ["/api/action-items"],
@@ -582,6 +662,18 @@ function ActionItemsTab() {
     },
   });
 
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("POST", "/api/action-items/batch-delete", { ids });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/action-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      setSelected(new Set());
+      setSelectMode(false);
+    },
+  });
+
   const toggleStatus = (item: ActionItem) => {
     const newStatus = item.status === "done" ? "pending" : "done";
     updateMutation.mutate({
@@ -592,17 +684,74 @@ function ActionItemsTab() {
 
   const items = data?.items || [];
 
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map((i) => i.id)));
+    }
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>;
   }
 
   return (
     <div className="flex flex-col gap-2 px-3 pb-3">
+      {items.length > 0 && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[10px] text-muted-foreground"
+            onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+            data-testid="button-toggle-select-actions"
+          >
+            {selectMode ? <X className="w-3 h-3 mr-1" /> : <CheckSquare className="w-3 h-3 mr-1" />}
+            {selectMode ? "Batal" : "Pilih"}
+          </Button>
+          {selectMode && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[10px] text-muted-foreground"
+                onClick={toggleSelectAll}
+                data-testid="button-select-all-actions"
+              >
+                {selected.size === items.length ? "Batal Semua" : "Pilih Semua"}
+              </Button>
+              {selected.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-[10px]"
+                  onClick={() => batchDeleteMutation.mutate(Array.from(selected))}
+                  disabled={batchDeleteMutation.isPending}
+                  data-testid="button-batch-delete-actions"
+                >
+                  {batchDeleteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                  Hapus {selected.size}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {items.length === 0 && !showAdd && (
         <p className="text-xs text-muted-foreground text-center py-6" data-testid="text-empty-actions">Belum ada action item</p>
       )}
       {items.map((item) => (
-        <Card key={item.id} className="p-2.5" data-testid={`card-action-${item.id}`}>
+        <Card key={item.id} className={`p-2.5 ${selectMode && selected.has(item.id) ? "ring-1 ring-primary bg-primary/5" : ""}`} data-testid={`card-action-${item.id}`}>
           {editId === item.id ? (
             <div className="flex flex-col gap-1.5">
               <Input
@@ -636,18 +785,24 @@ function ActionItemsTab() {
             </div>
           ) : (
             <div className="flex items-start gap-2">
-              <button
-                onClick={() => toggleStatus(item)}
-                className="mt-0.5 shrink-0 text-muted-foreground"
-                data-testid={`button-toggle-action-${item.id}`}
-              >
-                {item.status === "done" ? (
-                  <CheckSquare className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-              </button>
-              <div className="min-w-0 flex-1">
+              {selectMode ? (
+                <button onClick={() => toggleSelect(item.id)} className="mt-0.5 shrink-0" data-testid={`checkbox-action-${item.id}`}>
+                  {selected.has(item.id) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
+                </button>
+              ) : (
+                <button
+                  onClick={() => toggleStatus(item)}
+                  className="mt-0.5 shrink-0 text-muted-foreground"
+                  data-testid={`button-toggle-action-${item.id}`}
+                >
+                  {item.status === "done" ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              <div className="min-w-0 flex-1" onClick={() => selectMode && toggleSelect(item.id)}>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <p className={`text-xs font-medium ${item.status === "done" ? "line-through text-muted-foreground" : ""}`} data-testid={`text-action-title-${item.id}`}>
                     {item.title}
@@ -659,27 +814,29 @@ function ActionItemsTab() {
                 {item.assignee && <p className="text-[10px] text-muted-foreground" data-testid={`text-action-assignee-${item.id}`}>{item.assignee}</p>}
                 {item.deadline && <p className="text-[10px] text-muted-foreground" data-testid={`text-action-deadline-${item.id}`}>{new Date(item.deadline).toLocaleDateString("id-ID")}</p>}
               </div>
-              <div className="flex gap-0.5 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => { setEditId(item.id); setEditTitle(item.title); setEditAssignee(item.assignee || ""); }}
-                  data-testid={`button-edit-action-${item.id}`}
-                >
-                  <Edit2 className="w-3 h-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => deleteMutation.mutate(item.id)}
-                  disabled={deleteMutation.isPending}
-                  data-testid={`button-delete-action-${item.id}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
+              {!selectMode && (
+                <div className="flex gap-0.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => { setEditId(item.id); setEditTitle(item.title); setEditAssignee(item.assignee || ""); }}
+                    data-testid={`button-edit-action-${item.id}`}
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => deleteMutation.mutate(item.id)}
+                    disabled={deleteMutation.isPending}
+                    data-testid={`button-delete-action-${item.id}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </Card>

@@ -1373,6 +1373,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/meetings/batch-delete", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids required" });
+      for (const id of ids) { await deleteMeeting(Number(id)); }
+      return res.json({ success: true, deleted: ids.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ==================== ACTION ITEMS API ====================
   app.get("/api/action-items", async (req, res) => {
     try {
@@ -1455,6 +1467,18 @@ export async function registerRoutes(
       if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
       await deleteActionItem(Number(req.params.id));
       return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/action-items/batch-delete", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids required" });
+      for (const id of ids) { await deleteActionItem(Number(id)); }
+      return res.json({ success: true, deleted: ids.length });
     } catch (err: any) {
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -3249,10 +3273,14 @@ async function extractSecretaryData(userMessage: string, assistantReply: string,
   const existingProjects = await getProjects();
   const pendingActions = await getPendingActionItems();
 
+  const existingMeetingsForCtx = await getMeetings();
+  const recentMeetings = existingMeetingsForCtx.slice(0, 20);
+
   const existingContext = [
     teamMembers.length > 0 ? `Orang yang sudah tercatat: ${teamMembers.map(m => `${m.name}${m.aliases ? ` (alias: ${m.aliases})` : ""} [${m.category}]${m.position ? ` — ${m.position}` : ""}`).join(", ")}` : "",
     existingProjects.length > 0 ? `Project yang sudah tercatat: ${existingProjects.map(p => `${p.name} (${p.status})`).join(", ")}` : "",
-    pendingActions.length > 0 ? `Action items pending: ${pendingActions.slice(0, 10).map(a => `${a.title} → ${a.assignee || "unassigned"}`).join(", ")}` : "",
+    pendingActions.length > 0 ? `Action items pending: ${pendingActions.slice(0, 15).map(a => `"${a.title}" → ${a.assignee || "unassigned"}`).join("; ")}` : "",
+    recentMeetings.length > 0 ? `Meeting yang sudah tercatat: ${recentMeetings.map(m => `"${m.title}"${m.date_time ? ` (${m.date_time})` : ""}`).join("; ")}` : "",
   ].filter(Boolean).join("\n");
 
   const prompt = `Kamu adalah sistem extraction DARVIS. Analisis percakapan berikut dan ekstrak data terkait TIM, MEETING, ACTION ITEMS, dan PROJECT.
@@ -3288,6 +3316,13 @@ RULES:
 - Untuk action items: HANYA tangkap jika user EKSPLISIT minta dicatat (keyword trigger) ATAU ada delegasi tugas jelas ke orang tertentu. JANGAN tangkap topik diskusi umum, brainstorming, atau pertanyaan sebagai action item.
 - Untuk projects: tangkap project baru atau UPDATE status/progress project existing. Jika user menyebut persentase progress (misal "NM Apps udah 90%", "SGB Mini baru 5%"), WAJIB update progress project tersebut. Parsing deadline dari bahasa natural.
 - follow_ups: HANYA tangkap jika user bilang "nanti gw..." atau "besok mau..." dengan KOMITMEN JELAS. Jangan tangkap pembicaraan biasa.
+
+ANTI-DUPLIKASI (SANGAT PENTING):
+- CEK DAFTAR DI ATAS sebelum membuat entri baru. Jika meeting/action item/project SUDAH ADA di "KONTEKS YANG SUDAH ADA", JANGAN buat lagi.
+- Meeting yang judulnya mirip dengan yang sudah tercatat (contoh: "Meeting dengan Pak Tirta" sudah ada, jangan buat lagi "Pertemuan dengan Pak Tirta, kepala Bappebti" atau "Meeting Pak Tirta soal WPB") — ini DUPLIKAT.
+- Action item yang isinya mirip/overlapping dengan yang sudah pending — JANGAN buat lagi.
+- Kalau user MEMBAHAS meeting/tugas yang sudah ada, itu bukan perintah baru untuk dicatat ulang. Hanya buat entri baru jika user EKSPLISIT meminta pencatatan sesuatu yang BENAR-BENAR BARU.
+- Jika ragu apakah duplikat atau bukan, JANGAN buat. Lebih baik tidak catat daripada duplikat.
 
 RULE KUALITAS ACTION ITEM (WAJIB):
 - Title HARUS deskriptif dan lengkap, BUKAN hanya subjek. Sertakan konteks: siapa, apa, kenapa.
@@ -3454,7 +3489,27 @@ Respond ONLY with valid JSON, no other text.`;
 
     if (Array.isArray(parsed.meetings) && parsed.meetings.length > 0) {
       const existingMeetings = await getMeetings();
-      const seenMeetingKeys = new Set(existingMeetings.map(em => `${em.title.toLowerCase()}|${em.date_time || ""}`));
+      const isFuzzyDupMeeting = (newTitle: string, newDateTime: string | null): boolean => {
+        const lower = newTitle.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+        const newWords = lower.split(/\s+/).filter(w => w.length > 2);
+        const newDateOnly = newDateTime ? newDateTime.substring(0, 10) : null;
+        for (const em of existingMeetings) {
+          const emLower = em.title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          const emDateOnly = em.date_time ? em.date_time.substring(0, 10) : null;
+          if (emLower === lower) return true;
+          if (emLower.includes(lower) || lower.includes(emLower)) return true;
+          const emWords = emLower.split(/\s+/).filter(w => w.length > 2);
+          if (newWords.length > 0 && emWords.length > 0) {
+            const overlap = newWords.filter(w => emWords.includes(w)).length;
+            const similarity = overlap / Math.min(newWords.length, emWords.length);
+            if (similarity >= 0.6) {
+              if (!newDateOnly || !emDateOnly || newDateOnly === emDateOnly) return true;
+            }
+          }
+        }
+        return false;
+      };
+      const seenThisBatch = new Set<string>();
       for (const meeting of parsed.meetings.slice(0, 5)) {
         if (meeting.title && typeof meeting.title === "string") {
           let dateTime = meeting.date_time || null;
@@ -3465,12 +3520,16 @@ Respond ONLY with valid JSON, no other text.`;
               console.log(`Secretary: date-only detected for "${meeting.title}", defaulting to 09:00 WIB`);
             }
           }
-          const meetingKey = `${meeting.title.toLowerCase()}|${dateTime || ""}`;
-          if (seenMeetingKeys.has(meetingKey)) {
-            console.log(`Secretary: skipping duplicate meeting "${meeting.title}" at ${dateTime}`);
+          const batchKey = `${meeting.title.toLowerCase()}|${dateTime || ""}`;
+          if (seenThisBatch.has(batchKey)) {
+            console.log(`Secretary: skipping in-batch duplicate meeting "${meeting.title}"`);
             continue;
           }
-          seenMeetingKeys.add(meetingKey);
+          if (isFuzzyDupMeeting(meeting.title, dateTime)) {
+            console.log(`Secretary: skipping fuzzy-duplicate meeting "${meeting.title}" at ${dateTime}`);
+            continue;
+          }
+          seenThisBatch.add(batchKey);
           const meetingId = await createMeeting({
             title: meeting.title,
             date_time: dateTime,
@@ -3516,20 +3575,28 @@ Respond ONLY with valid JSON, no other text.`;
       const existingTitles = existingActions.map(ea => ea.title.toLowerCase());
       const seenActionKeys = new Set(existingTitles);
       const isFuzzyDuplicate = (newTitle: string): boolean => {
-        const lower = newTitle.toLowerCase();
+        const lower = newTitle.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+        const newWords = lower.split(/\s+/).filter(w => w.length > 2);
         for (const existing of existingTitles) {
-          if (existing === lower) return true;
-          if (existing.includes(lower) || lower.includes(existing)) return true;
-          const words1 = lower.split(/\s+/).filter(w => w.length > 3);
-          const words2 = existing.split(/\s+/).filter(w => w.length > 3);
-          if (words1.length > 0 && words2.length > 0) {
-            const overlap = words1.filter(w => words2.includes(w)).length;
-            const similarity = overlap / Math.max(words1.length, words2.length);
-            if (similarity >= 0.6) return true;
+          const eLower = existing.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          if (eLower === lower) return true;
+          if (eLower.includes(lower) || lower.includes(eLower)) return true;
+          const eWords = eLower.split(/\s+/).filter(w => w.length > 2);
+          if (newWords.length > 0 && eWords.length > 0) {
+            const overlap = newWords.filter(w => eWords.includes(w)).length;
+            const similarity = overlap / Math.min(newWords.length, eWords.length);
+            if (similarity >= 0.5) return true;
           }
         }
         for (const seen of seenActionKeys) {
-          if (seen === lower || seen.includes(lower) || lower.includes(seen)) return true;
+          const sLower = seen.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+          if (sLower === lower || sLower.includes(lower) || lower.includes(sLower)) return true;
+          const sWords = sLower.split(/\s+/).filter(w => w.length > 2);
+          if (newWords.length > 0 && sWords.length > 0) {
+            const overlap = newWords.filter(w => sWords.includes(w)).length;
+            const similarity = overlap / Math.min(newWords.length, sWords.length);
+            if (similarity >= 0.5) return true;
+          }
         }
         return false;
       };
