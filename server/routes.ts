@@ -83,6 +83,13 @@ import {
   mergeRooms,
   getLastLobbyMessageTime,
   getArchivedActionItems,
+  copyMessagesToRoom,
+  createSecretaryPending,
+  getSecretaryPending,
+  getSecretaryPendingCount,
+  getSecretaryPendingById,
+  updateSecretaryPendingStatus,
+  purgeOldSecretaryPending,
 } from "./db";
 import { getVapidPublicKey, sendPushToAll } from "./push";
 import { getWIBDateString, getWIBTimeString, getWIBDayName, parseWIBTimestamp } from "./proactive";
@@ -1825,6 +1832,230 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ROOM APPROVAL API ====================
+  app.post("/api/rooms/approve-move", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const userId = getUserId(req);
+      const { action, roomId, roomTitle } = req.body;
+      if (action === "create_new") {
+        const newRoomId = await createChatRoom(userId, roomTitle || "Obrolan Baru");
+        await copyMessagesToRoom(userId, newRoomId, 5);
+        console.log(`Room approval: created room #${newRoomId}: "${roomTitle}" — lobby messages COPIED`);
+        return res.json({ success: true, roomId: newRoomId });
+      } else if (action === "move_to_existing" && roomId) {
+        await copyMessagesToRoom(userId, roomId, 5);
+        console.log(`Room approval: copied lobby messages to room #${roomId}`);
+        return res.json({ success: true, roomId });
+      }
+      return res.status(400).json({ message: "Invalid action" });
+    } catch (err: any) {
+      console.error("Room approve error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==================== SECRETARY APPROVAL API ====================
+  app.get("/api/secretary/pending", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const userId = getUserId(req);
+      const items = await getSecretaryPending(userId);
+      return res.json({ items });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/secretary/pending/count", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.json({ count: 0 });
+      const userId = getUserId(req);
+      const count = await getSecretaryPendingCount(userId);
+      return res.json({ count });
+    } catch (err: any) {
+      return res.json({ count: 0 });
+    }
+  });
+
+  app.post("/api/secretary/approve", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { id } = req.body;
+      const item = await getSecretaryPendingById(id);
+      if (!item || item.status !== "pending") return res.status(404).json({ message: "Not found" });
+
+      if (item.type === "meeting") {
+        const data = item.data;
+        const meetingId = await createMeeting({
+          title: data.title,
+          date_time: data.date_time || null,
+          participants: data.participants || null,
+          agenda: data.agenda || null,
+          notify: data.notify === true,
+        });
+        if (data.notify && data.date_time) {
+          try {
+            const meetingTime = parseWIBTimestamp(data.date_time);
+            const diffMin = (meetingTime.getTime() - Date.now()) / (1000 * 60);
+            if (diffMin > 0 && diffMin <= 35) {
+              await createNotification({
+                type: "meeting_reminder",
+                title: `Meeting dalam ${Math.round(diffMin)} menit`,
+                message: `${data.title}${data.participants ? ` — Peserta: ${data.participants}` : ""}`,
+                data: JSON.stringify({ meeting_id: meetingId }),
+              });
+              await setSetting(`meeting_reminder_${meetingId}_${data.date_time}`, "1");
+            }
+          } catch (_) {}
+        }
+        console.log(`Secretary approved: meeting "${data.title}" (id=${meetingId})`);
+      } else if (item.type === "action_item") {
+        const data = item.data;
+        const actionId = await createActionItem({
+          title: data.title,
+          assignee: data.assignee || null,
+          deadline: data.deadline || null,
+          priority: data.priority || "medium",
+          source: data.source || "conversation",
+          notes: data.notes || null,
+        });
+        if (data.notify && data.deadline) {
+          try {
+            await createNotification({
+              type: "action_item",
+              title: `Reminder: action item`,
+              message: `${data.title}${data.assignee ? ` → ${data.assignee}` : ""} — Deadline: ${data.deadline}`,
+              data: JSON.stringify({ action_item_id: actionId }),
+            });
+          } catch (_) {}
+        }
+        console.log(`Secretary approved: action item "${data.title}" (id=${actionId})`);
+      } else if (item.type === "project") {
+        const data = item.data;
+        await upsertProject({
+          name: data.name,
+          description: data.description || null,
+          pic: data.pic || null,
+          status: data.status || "active",
+          milestones: data.milestones || null,
+          deadline: data.deadline || null,
+          progress: data.progress || 0,
+          notes: data.notes || null,
+        });
+        console.log(`Secretary approved: project "${data.name}"`);
+      }
+
+      await updateSecretaryPendingStatus(id, "approved");
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Secretary approve error:", err?.message || err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/secretary/reject", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { id } = req.body;
+      await updateSecretaryPendingStatus(id, "rejected");
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/secretary/approve-all", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const userId = getUserId(req);
+      const items = await getSecretaryPending(userId);
+      let approved = 0;
+      for (const item of items) {
+        try {
+          if (item.type === "meeting") {
+            const data = item.data;
+            await createMeeting({
+              title: data.title, date_time: data.date_time || null,
+              participants: data.participants || null, agenda: data.agenda || null,
+              notify: data.notify === true,
+            });
+          } else if (item.type === "action_item") {
+            const data = item.data;
+            await createActionItem({
+              title: data.title, assignee: data.assignee || null,
+              deadline: data.deadline || null, priority: data.priority || "medium",
+              source: data.source || "conversation", notes: data.notes || null,
+            });
+          } else if (item.type === "project") {
+            const data = item.data;
+            await upsertProject({
+              name: data.name, description: data.description || null,
+              pic: data.pic || null, status: data.status || "active",
+              milestones: data.milestones || null, deadline: data.deadline || null,
+              progress: data.progress || 0, notes: data.notes || null,
+            });
+          }
+          await updateSecretaryPendingStatus(item.id, "approved");
+          approved++;
+        } catch (_) {}
+      }
+      return res.json({ success: true, approved });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/secretary/reject-all", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const userId = getUserId(req);
+      const items = await getSecretaryPending(userId);
+      for (const item of items) {
+        await updateSecretaryPendingStatus(item.id, "rejected");
+      }
+      return res.json({ success: true, rejected: items.length });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==================== EXPIRED ITEMS API ====================
+  app.post("/api/expired/keep", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { type, id } = req.body;
+      if (type === "meeting") {
+        await updateMeeting(id, { status: "completed" });
+      } else if (type === "action_item") {
+        const item = await getActionItemById(id);
+        if (item) {
+          const newDeadline = new Date();
+          newDeadline.setDate(newDeadline.getDate() + 7);
+          await updateActionItem(id, { deadline: newDeadline.toISOString().split("T")[0] });
+        }
+      }
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/expired/delete", async (req, res) => {
+    try {
+      if (req.session.isOwner !== true) return res.status(403).json({ message: "Owner only" });
+      const { type, id } = req.body;
+      if (type === "meeting") {
+        await deleteMeeting(id);
+      } else if (type === "action_item") {
+        await deleteActionItem(id);
+      }
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/conversation-tags", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -2765,23 +2996,13 @@ GAYA NGOBROL:
             try { roomActionResult = await roomActionPromise; } catch (_e) { roomActionResult = null; }
           }
 
-          if (roomActionResult && !activeRoomId) {
-            if (roomActionResult.action === "create_new") {
-              const newRoomId = await createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
-              activeRoomId = newRoomId;
-              roomActionResult.roomId = newRoomId;
-              await moveMessagesToRoom(userId, newRoomId);
-              console.log(`Auto-created room #${newRoomId}: "${roomActionResult.roomTitle}" — lobby messages moved`);
-            } else if (roomActionResult.action === "move_to_existing" && roomActionResult.roomId) {
-              activeRoomId = roomActionResult.roomId;
-              await moveMessagesToRoom(userId, roomActionResult.roomId);
-              console.log(`Auto-moving to room #${roomActionResult.roomId}: "${roomActionResult.roomTitle}" — lobby messages moved`);
-            }
-          }
-
           const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: reply };
-          if (roomActionResult && isOwner) {
-            donePayload.roomAction = roomActionResult;
+          if (roomActionResult && isOwner && !activeRoomId && roomActionResult.action !== "stay_lobby") {
+            donePayload.roomSuggestion = roomActionResult;
+            console.log(`Room suggestion (not auto-moved): ${JSON.stringify(roomActionResult)}`);
+          }
+          if (isOwner) {
+            try { donePayload.pendingSecretaryCount = await getSecretaryPendingCount(userId); } catch (_) {}
           }
           res.write(`data: ${JSON.stringify(donePayload)}\n\n`);
         } else {
@@ -2794,23 +3015,13 @@ GAYA NGOBROL:
             try { roomActionResult = await roomActionPromise; } catch (_e) { roomActionResult = null; }
           }
 
-          if (roomActionResult && !activeRoomId) {
-            if (roomActionResult.action === "create_new") {
-              const newRoomId = await createChatRoom(userId, roomActionResult.roomTitle || "Obrolan Baru");
-              activeRoomId = newRoomId;
-              roomActionResult.roomId = newRoomId;
-              await moveMessagesToRoom(userId, newRoomId);
-              console.log(`Auto-created room #${newRoomId}: "${roomActionResult.roomTitle}" — lobby messages moved`);
-            } else if (roomActionResult.action === "move_to_existing" && roomActionResult.roomId) {
-              activeRoomId = roomActionResult.roomId;
-              await moveMessagesToRoom(userId, roomActionResult.roomId);
-              console.log(`Auto-moving to room #${roomActionResult.roomId}: "${roomActionResult.roomTitle}" — lobby messages moved`);
-            }
-          }
-
           const donePayload: any = { type: "done", nodeUsed, contextMode, presentationMode, fullReply: (!isOwner || isContributor) ? reply : undefined };
-          if (roomActionResult && isOwner) {
-            donePayload.roomAction = roomActionResult;
+          if (roomActionResult && isOwner && !activeRoomId && roomActionResult.action !== "stay_lobby") {
+            donePayload.roomSuggestion = roomActionResult;
+            console.log(`Room suggestion (not auto-moved): ${JSON.stringify(roomActionResult)}`);
+          }
+          if (isOwner) {
+            try { donePayload.pendingSecretaryCount = await getSecretaryPendingCount(userId); } catch (_) {}
           }
           res.write(`data: ${JSON.stringify(donePayload)}\n\n`);
         }
@@ -2872,13 +3083,13 @@ GAYA NGOBROL:
         const msgCount = activeRoomId ? await getMessageCountForRoom(activeRoomId) : await getMessageCount(userId);
         console.log(`Post-chat: isOwner=${isOwner}, isContributor=${isContributor}, msgLen=${message.length}, replyLen=${reply.length}`);
         if (isOwner) {
-          console.log("Post-chat: calling extractSecretaryData NOW");
+          console.log("Post-chat: calling extractSecretaryData NOW (approval mode)");
           const recentMsgs = activeRoomId
             ? await getLastMessagesForRoom(activeRoomId, 6)
             : await getLastMessages(userId, 6);
           const recentHistory = recentMsgs.map((m: any) => ({ role: m.role as string, content: m.content as string }));
-          extractSecretaryData(message, reply, recentHistory).then(() => {
-            console.log("Post-chat: extractSecretaryData completed successfully");
+          extractSecretaryData(message, reply, recentHistory, userId).then(async () => {
+            console.log("Post-chat: extractSecretaryData completed successfully (pending mode)");
           }).catch((err) => {
             console.error("Secretary extraction error:", err?.message || err);
             if (err?.stack) console.error("Secretary extraction call stack:", err.stack.split("\n").slice(0, 5).join("\n"));
@@ -3253,8 +3464,8 @@ RULES:
   }
 }
 
-async function extractSecretaryData(userMessage: string, assistantReply: string, recentHistory: Array<{role: string, content: string}> = []) {
-  console.log(`extractSecretaryData: ENTERED — userMsg=${userMessage.substring(0, 80)}...`);
+async function extractSecretaryData(userMessage: string, assistantReply: string, recentHistory: Array<{role: string, content: string}> = [], userId: string = "mas_dr") {
+  console.log(`extractSecretaryData: ENTERED (approval mode) — userMsg=${userMessage.substring(0, 80)}...`);
   let combinedText = "";
   if (recentHistory.length > 0) {
     const filtered = recentHistory.slice(-6).filter(m => m.content !== userMessage && m.content !== assistantReply);
@@ -3517,55 +3728,23 @@ Respond ONLY with valid JSON, no other text.`;
             const dtStr = dateTime.trim();
             if (/^\d{4}-\d{2}-\d{2}$/.test(dtStr)) {
               dateTime = `${dtStr} 09:00`;
-              console.log(`Secretary: date-only detected for "${meeting.title}", defaulting to 09:00 WIB`);
             }
           }
           const batchKey = `${meeting.title.toLowerCase()}|${dateTime || ""}`;
-          if (seenThisBatch.has(batchKey)) {
-            console.log(`Secretary: skipping in-batch duplicate meeting "${meeting.title}"`);
-            continue;
-          }
+          if (seenThisBatch.has(batchKey)) continue;
           if (isFuzzyDupMeeting(meeting.title, dateTime)) {
-            console.log(`Secretary: skipping fuzzy-duplicate meeting "${meeting.title}" at ${dateTime}`);
+            console.log(`Secretary: skipping fuzzy-duplicate meeting "${meeting.title}"`);
             continue;
           }
           seenThisBatch.add(batchKey);
-          const meetingId = await createMeeting({
+          await createSecretaryPending(userId, "meeting", {
             title: meeting.title,
             date_time: dateTime,
             participants: meeting.participants || null,
             agenda: meeting.agenda || null,
             notify: meeting.notify === true,
           });
-          console.log(`Secretary: created meeting "${meeting.title}" (id=${meetingId}, notify=${!!meeting.notify})`);
-
-          const shouldNotify = meeting.notify === true;
-
-          if (shouldNotify && dateTime) {
-            try {
-              const meetingTime = parseWIBTimestamp(dateTime);
-              const nowMs = Date.now();
-              const diffMin = (meetingTime.getTime() - nowMs) / (1000 * 60);
-
-              if (diffMin > 0 && diffMin <= 35) {
-                const reminderMsg = `${meeting.title}${meeting.participants ? ` — Peserta: ${meeting.participants}` : ""}`;
-                await createNotification({
-                  type: "meeting_reminder",
-                  title: `Meeting dalam ${Math.round(diffMin)} menit`,
-                  message: reminderMsg,
-                  data: JSON.stringify({ meeting_id: meetingId }),
-                });
-                await setSetting(`meeting_reminder_${meetingId}_${dateTime}`, "1");
-                console.log(`Secretary: immediate reminder for "${meeting.title}" (${Math.round(diffMin)}min away)`);
-              } else if (diffMin > 35) {
-                console.log(`Secretary: meeting "${meeting.title}" saved with notify=true, proactive reminder will fire 30min before at ${dateTime} WIB`);
-              }
-            } catch (reminderErr: any) {
-              console.error(`Secretary: failed to process reminder for "${meeting.title}":`, reminderErr?.message);
-            }
-          } else {
-            console.log(`Secretary: meeting "${meeting.title}" saved without notification (notify=${shouldNotify}, hasDateTime=${!!dateTime})`);
-          }
+          console.log(`Secretary: pending meeting "${meeting.title}" (awaiting approval)`);
         }
       }
     }
@@ -3607,27 +3786,16 @@ Respond ONLY with valid JSON, no other text.`;
             continue;
           }
           seenActionKeys.add(item.title.toLowerCase());
-          const actionId = await createActionItem({
+          await createSecretaryPending(userId, "action_item", {
             title: item.title,
             assignee: item.assignee || null,
             deadline: item.deadline || null,
             priority: item.priority || "medium",
             source: "conversation",
             notes: item.notes || null,
+            notify: item.notify === true,
           });
-          console.log(`Secretary: created action item "${item.title}" (id=${actionId}, notify=${!!item.notify})`);
-          if (item.notify === true && item.deadline) {
-            try {
-              const deadlineInfo = ` — Deadline: ${item.deadline}`;
-              await createNotification({
-                type: "action_item",
-                title: `Reminder: action item`,
-                message: `${item.title}${item.assignee ? ` → ${item.assignee}` : ""}${deadlineInfo}`,
-                data: JSON.stringify({ action_item_id: actionId }),
-              });
-              console.log(`Secretary: notification for action item "${item.title}"`);
-            } catch (_notifErr) {}
-          }
+          console.log(`Secretary: pending action item "${item.title}" (awaiting approval)`);
         }
       }
     }
@@ -3635,17 +3803,32 @@ Respond ONLY with valid JSON, no other text.`;
     if (Array.isArray(parsed.projects) && parsed.projects.length > 0) {
       for (const project of parsed.projects.slice(0, 5)) {
         if (project.name && typeof project.name === "string") {
-          await upsertProject({
-            name: project.name,
-            description: project.description || null,
-            pic: project.pic || null,
-            status: project.status || "active",
-            milestones: project.milestones || null,
-            deadline: project.deadline || null,
-            progress: project.progress || 0,
-            notes: project.notes || null,
-          });
-          console.log(`Secretary: upserted project "${project.name}"`);
+          const existingProject = existingProjects.find(p => p.name.toLowerCase() === project.name.toLowerCase());
+          if (existingProject && project.progress && project.progress !== existingProject.progress) {
+            await upsertProject({
+              name: project.name,
+              description: project.description || existingProject.description || null,
+              pic: project.pic || existingProject.pic || null,
+              status: project.status || existingProject.status || "active",
+              milestones: project.milestones || existingProject.milestones || null,
+              deadline: project.deadline || existingProject.deadline || null,
+              progress: project.progress || existingProject.progress || 0,
+              notes: project.notes || existingProject.notes || null,
+            });
+            console.log(`Secretary: auto-updated project "${project.name}" progress to ${project.progress}%`);
+          } else if (!existingProject) {
+            await createSecretaryPending(userId, "project", {
+              name: project.name,
+              description: project.description || null,
+              pic: project.pic || null,
+              status: project.status || "active",
+              milestones: project.milestones || null,
+              deadline: project.deadline || null,
+              progress: project.progress || 0,
+              notes: project.notes || null,
+            });
+            console.log(`Secretary: pending new project "${project.name}" (awaiting approval)`);
+          }
         }
       }
     }
@@ -3656,19 +3839,16 @@ Respond ONLY with valid JSON, no other text.`;
       for (const fu of parsed.follow_ups.slice(0, 3)) {
         if (fu.text && typeof fu.text === "string") {
           const fuKey = fu.text.toLowerCase();
-          if (seenFUKeys.has(fuKey)) {
-            console.log(`Secretary: skipping duplicate follow-up "${fu.text}"`);
-            continue;
-          }
+          if (seenFUKeys.has(fuKey)) continue;
           seenFUKeys.add(fuKey);
-          await createActionItem({
+          await createSecretaryPending(userId, "action_item", {
             title: fu.text,
             assignee: "DR",
             deadline: fu.deadline_hint || null,
             priority: "medium",
             source: "follow-up dari percakapan",
           });
-          console.log(`Secretary: created follow-up "${fu.text}"`);
+          console.log(`Secretary: pending follow-up "${fu.text}" (awaiting approval)`);
         }
       }
     }

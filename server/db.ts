@@ -202,6 +202,18 @@ export async function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_chat_rooms_session_id ON chat_rooms(session_id);
     CREATE INDEX IF NOT EXISTS idx_chat_rooms_updated_at ON chat_rooms(updated_at);
+
+    CREATE TABLE IF NOT EXISTS secretary_pending (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT 'mas_dr',
+      type TEXT NOT NULL CHECK(type IN ('meeting', 'action_item', 'project', 'team_member')),
+      data JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+      created_at TEXT NOT NULL DEFAULT (NOW()::TEXT)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_secretary_pending_status ON secretary_pending(status);
+    CREATE INDEX IF NOT EXISTS idx_secretary_pending_user_id ON secretary_pending(user_id);
   `);
 
   const migrations = [
@@ -1406,6 +1418,63 @@ export async function mergeRooms(targetRoomId: number, sourceRoomIds: number[]) 
   } finally {
     client.release();
   }
+}
+
+export async function copyMessagesToRoom(userId: string, roomId: number, sinceMinutes: number = 5) {
+  await pool.query(
+    `INSERT INTO conversations (user_id, role, content, room_id, created_at)
+     SELECT user_id, role, content, $1, created_at
+     FROM conversations
+     WHERE user_id = $2 AND room_id IS NULL AND created_at::timestamp > NOW() - INTERVAL '${sinceMinutes} minutes'
+     ORDER BY id ASC`,
+    [roomId, userId]
+  );
+  await touchChatRoom(roomId);
+}
+
+export async function createSecretaryPending(userId: string, type: string, data: any): Promise<number> {
+  const result = await pool.query(
+    `INSERT INTO secretary_pending (user_id, type, data) VALUES ($1, $2, $3) RETURNING id`,
+    [userId, type, JSON.stringify(data)]
+  );
+  return result.rows[0].id;
+}
+
+export async function getSecretaryPending(userId: string): Promise<any[]> {
+  const result = await pool.query(
+    `SELECT * FROM secretary_pending WHERE user_id = $1 AND status = 'pending' ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getSecretaryPendingCount(userId: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count FROM secretary_pending WHERE user_id = $1 AND status = 'pending'`,
+    [userId]
+  );
+  return parseInt(result.rows[0].count || "0");
+}
+
+export async function getSecretaryPendingById(id: number): Promise<any | null> {
+  const result = await pool.query(
+    `SELECT * FROM secretary_pending WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+export async function updateSecretaryPendingStatus(id: number, status: string) {
+  await pool.query(
+    `UPDATE secretary_pending SET status = $1 WHERE id = $2`,
+    [status, id]
+  );
+}
+
+export async function purgeOldSecretaryPending() {
+  await pool.query(
+    `UPDATE secretary_pending SET status = 'rejected' WHERE status = 'pending' AND created_at::timestamp < NOW() - INTERVAL '24 hours'`
+  );
 }
 
 export default pool;

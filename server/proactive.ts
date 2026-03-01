@@ -14,6 +14,7 @@ import {
   getConversationTags,
   getSetting,
   setSetting,
+  purgeOldSecretaryPending,
 } from "./db";
 import { sendPushToAll } from "./push";
 
@@ -149,26 +150,46 @@ export async function checkMeetingReminders() {
 
 export async function checkOverdueItems() {
   try {
-    if (await hasSentNotifToday("overdue_check")) return;
-
     const overdue = await getOverdueActionItems();
-    if (overdue.length === 0) return;
+    for (const item of overdue.slice(0, 10)) {
+      const settingKey = `expired_notif_action_${item.id}`;
+      const alreadySent = await getSetting(settingKey);
+      if (alreadySent) continue;
 
-    const items = overdue.slice(0, 5).map(a => {
-      let text = `${a.title}`;
-      if (a.assignee) text += ` (${a.assignee})`;
-      if (a.deadline) text += ` — deadline: ${a.deadline}`;
-      return text;
-    });
+      const deadlineInfo = item.deadline ? ` (deadline: ${item.deadline})` : "";
+      const assigneeInfo = item.assignee ? ` → ${item.assignee}` : "";
+      await createNotification({
+        type: "expired_review",
+        title: `Action item overdue`,
+        message: `${item.title}${assigneeInfo}${deadlineInfo}`,
+        data: JSON.stringify({ itemType: "action_item", itemId: item.id }),
+      });
+      await setSetting(settingKey, "1");
+      console.log(`Proactive: expired review notification for action item #${item.id} "${item.title}"`);
+    }
 
-    await createNotification({
-      type: "overdue_alert",
-      title: `${overdue.length} action item overdue`,
-      message: items.join("\n"),
-      data: JSON.stringify({ count: overdue.length }),
-    });
-    await markNotifSent("overdue_check");
-    console.log(`Proactive: overdue alert sent (${overdue.length} items)`);
+    const meetings = await getMeetings();
+    const todayStr = getWIBDateString();
+    const todayMs = new Date(todayStr + "T00:00:00+07:00").getTime();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    for (const meeting of meetings) {
+      if (!meeting.date_time || meeting.status === "completed" || meeting.status === "cancelled") continue;
+      const meetingTime = parseWIBTimestamp(meeting.date_time);
+      if (meetingTime.getTime() < todayMs - oneDayMs) {
+        const settingKey = `expired_notif_meeting_${meeting.id}`;
+        const alreadySent = await getSetting(settingKey);
+        if (alreadySent) continue;
+
+        await createNotification({
+          type: "expired_review",
+          title: `Meeting sudah lewat`,
+          message: `${meeting.title} (${meeting.date_time})`,
+          data: JSON.stringify({ itemType: "meeting", itemId: meeting.id }),
+        });
+        await setSetting(settingKey, "1");
+        console.log(`Proactive: expired review notification for meeting #${meeting.id} "${meeting.title}"`);
+      }
+    }
   } catch (err: any) {
     console.error("Overdue check failed:", err?.message || err);
   }
@@ -350,13 +371,6 @@ async function aggressiveCleanup() {
       console.log(`Cleanup: removed ${cleaned} old notifications`);
     }
 
-    const overdueResult = await pool.query(`
-      UPDATE action_items SET status = 'archived' WHERE status = 'pending' AND deadline IS NOT NULL AND deadline::date < CURRENT_DATE - INTERVAL '3 days'
-    `);
-    if ((overdueResult.rowCount || 0) > 0) {
-      console.log(`Cleanup: auto-archived ${overdueResult.rowCount} overdue action items (3+ days past deadline)`);
-    }
-
     const deleteOldCancelled = await pool.query(`
       DELETE FROM action_items WHERE status = 'cancelled' AND updated_at::timestamp < NOW() - INTERVAL '14 days'
     `);
@@ -364,12 +378,9 @@ async function aggressiveCleanup() {
       console.log(`Cleanup: purged ${deleteOldCancelled.rowCount} old cancelled action items (14+ days)`);
     }
 
-    const completedMeetings = await pool.query(`
-      DELETE FROM meetings WHERE status = 'completed' AND date_time IS NOT NULL AND date_time::timestamp < NOW() - INTERVAL '7 days'
-    `);
-    if ((completedMeetings.rowCount || 0) > 0) {
-      console.log(`Cleanup: auto-deleted ${completedMeetings.rowCount} completed meetings (7+ days old)`);
-    }
+    try {
+      await purgeOldSecretaryPending();
+    } catch (_) {}
   } catch (err: any) {
     console.error("Aggressive cleanup failed:", err?.message || err);
   }

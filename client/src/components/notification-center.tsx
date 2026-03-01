@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Bell, Trash2, X, Clock, AlertTriangle, Lightbulb, Calendar, Users, FolderKanban, Sparkles } from "lucide-react";
+import { Bell, Trash2, X, Clock, AlertTriangle, Lightbulb, Calendar, Users, FolderKanban, Sparkles, Archive } from "lucide-react";
 
 interface Notification {
   id: number;
@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   darvis_insight: Lightbulb,
   contributor_alert: Users,
   project_update: FolderKanban,
+  expired_review: Archive,
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -37,6 +38,7 @@ const TYPE_COLORS: Record<string, string> = {
   darvis_insight: "text-purple-500",
   contributor_alert: "text-cyan-500",
   project_update: "text-indigo-500",
+  expired_review: "text-orange-500",
 };
 
 function timeAgo(dateStr: string): string {
@@ -271,6 +273,10 @@ export function NotificationCenter() {
               notifications.map((notif) => {
                 const IconComp = TYPE_ICONS[notif.type] || Bell;
                 const colorClass = TYPE_COLORS[notif.type] || "text-muted-foreground";
+                let expiredData: { itemType?: string; itemId?: number } | null = null;
+                if (notif.type === "expired_review" && notif.data) {
+                  try { expiredData = JSON.parse(notif.data); } catch (_) {}
+                }
                 return (
                   <div
                     key={notif.id}
@@ -299,6 +305,38 @@ export function NotificationCenter() {
                       <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-pre-line leading-snug line-clamp-3" data-testid={`text-notification-message-${notif.id}`}>
                         {notif.message}
                       </p>
+                      {notif.type === "expired_review" && expiredData && (
+                        <div className="flex gap-1.5 mt-1.5">
+                          <Button size="sm" variant="outline" className="text-[10px] h-6 px-2" data-testid={`button-keep-expired-${notif.id}`}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await fetch("/api/expired/keep", {
+                                  method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ type: expiredData!.itemType, id: expiredData!.itemId }),
+                                });
+                                deleteMutation.mutate(notif.id);
+                              } catch (_) {}
+                            }}>
+                            Keep
+                          </Button>
+                          <Button size="sm" variant="destructive" className="text-[10px] h-6 px-2" data-testid={`button-delete-expired-${notif.id}`}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await fetch("/api/expired/delete", {
+                                  method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ type: expiredData!.itemType, id: expiredData!.itemId }),
+                                });
+                                deleteMutation.mutate(notif.id);
+                                queryClient.invalidateQueries({ queryKey: ["/api/action-items"] });
+                                queryClient.invalidateQueries({ queryKey: ["/api/meetings"] });
+                              } catch (_) {}
+                            }}>
+                            Hapus
+                          </Button>
+                        </div>
+                      )}
                       <p className="text-[10px] text-muted-foreground/60 mt-1" data-testid={`text-notification-time-${notif.id}`}>
                         {timeAgo(notif.created_at)}
                       </p>

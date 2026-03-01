@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download, KeyRound, Users, Settings, Check, LayoutDashboard, Phone, PhoneOff, Volume2, FileText, FileSpreadsheet, File, Paperclip, PanelLeft, Menu, Bell, ExternalLink } from "lucide-react";
+import { Send, Trash2, Loader2, Lightbulb, X, Shield, Heart, Sparkles, User, Fingerprint, Mic, MicOff, ImagePlus, Lock, LogOut, Download, KeyRound, Users, Settings, Check, LayoutDashboard, Phone, PhoneOff, Volume2, FileText, FileSpreadsheet, File, Paperclip, PanelLeft, Menu, Bell, ExternalLink, FolderOpen, ClipboardList } from "lucide-react";
 import { NotificationCenter } from "@/components/notification-center";
 import { SecretaryDashboard } from "@/components/secretary-dashboard";
+import { SecretaryReview } from "@/components/secretary-review";
 import { ConversationSidebar } from "@/components/conversation-sidebar";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage, ChatResponse, HistoryResponse, PreferencesResponse, PersonaFeedbackResponse, ProfileEnrichmentsResponse } from "@shared/schema";
@@ -192,7 +193,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   gaya_bahasa: "Gaya Bahasa",
 };
 
-function parseSSELine(line: string): { type: string; content?: string; nodeUsed?: string | null; contextMode?: string | null; fullReply?: string; message?: string; retryable?: boolean; roomAction?: { action: string; roomId?: number; roomTitle?: string; reason?: string } } | null {
+function parseSSELine(line: string): { type: string; content?: string; nodeUsed?: string | null; contextMode?: string | null; fullReply?: string; message?: string; retryable?: boolean; roomSuggestion?: { action: string; roomId?: number; roomTitle?: string; reason?: string }; pendingSecretaryCount?: number } | null {
   if (!line.startsWith("data: ")) return null;
   try {
     return JSON.parse(line.slice(6));
@@ -231,6 +232,9 @@ export default function ChatPage() {
   const [pwError, setPwError] = useState("");
   const [pwSuccess, setPwSuccess] = useState("");
   const [showOwnerMenu, setShowOwnerMenu] = useState(false);
+  const [roomSuggestion, setRoomSuggestion] = useState<{ action: string; roomId?: number; roomTitle?: string; reason?: string } | null>(null);
+  const [pendingSecretaryCount, setPendingSecretaryCount] = useState(0);
+  const [showSecretaryReview, setShowSecretaryReview] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -826,21 +830,11 @@ export default function ChatPage() {
             if (conversationModeRef.current && finalContent) {
               pendingTtsRef.current = finalContent;
             }
-            if (parsed.roomAction) {
-              const ra = parsed.roomAction;
-              if (ra.action === "create_new" && ra.roomId) {
-                setActiveRoomId(ra.roomId);
-                setShowRoomSidebar(true);
-                queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-                toast({ title: `Room baru: "${ra.roomTitle}"`, description: ra.reason || "Topik baru terdeteksi" });
-              } else if (ra.action === "move_to_existing" && ra.roomId) {
-                setActiveRoomId(ra.roomId);
-                setShowRoomSidebar(true);
-                queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/history"] });
-                toast({ title: `Dilanjutkan di "${ra.roomTitle}"`, description: ra.reason || "Topik nyambung dengan room yang ada" });
-              }
+            if (parsed.roomSuggestion) {
+              setRoomSuggestion(parsed.roomSuggestion);
+            }
+            if (parsed.pendingSecretaryCount && parsed.pendingSecretaryCount > 0) {
+              setPendingSecretaryCount(parsed.pendingSecretaryCount);
             }
           } else if (parsed.type === "error") {
             cleanup();
@@ -1292,6 +1286,11 @@ export default function ChatPage() {
                     >
                       <LayoutDashboard className="w-3.5 h-3.5" />
                       Dashboard Secretary
+                      {pendingSecretaryCount > 0 && (
+                        <span className="ml-auto min-w-[16px] h-4 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1" data-testid="badge-pending-secretary">
+                          {pendingSecretaryCount}
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => { setShowPasswordPanel(!showPasswordPanel); setPwError(""); setPwSuccess(""); setPwCurrent(""); setPwNew(""); setPwConfirm(""); setShowOwnerMenu(false); }}
@@ -1641,6 +1640,13 @@ export default function ChatPage() {
         <SecretaryDashboard onClose={() => setShowDashboard(false)} />
       )}
 
+      {showSecretaryReview && isOwner && (
+        <SecretaryReview
+          onClose={() => setShowSecretaryReview(false)}
+          onCountUpdate={(count) => { if (count === 0) { setShowSecretaryReview(false); setPendingSecretaryCount(0); } }}
+        />
+      )}
+
       <div className={`flex-1 overflow-y-auto px-3 sm:px-4 ${showDashboard ? "hidden" : ""}`} ref={scrollRef} data-testid="container-messages">
         <div className="py-3 sm:py-4 space-y-3 max-w-2xl mx-auto">
           {historyLoading && (
@@ -1718,6 +1724,72 @@ export default function ChatPage() {
           {!isStreaming && currentContextMode && currentContextMode !== "general" && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && (
             <div className="flex justify-start pl-1" data-testid="container-context-mode">
               <ContextModeBadge mode={currentContextMode} />
+            </div>
+          )}
+
+          {!isStreaming && roomSuggestion && (
+            <div className="flex justify-start pl-1 mt-2" data-testid="container-room-suggestion">
+              <div className="bg-primary/10 dark:bg-primary/20 border border-primary/30 rounded-lg p-3 max-w-sm">
+                <div className="flex items-center gap-2 mb-2">
+                  <FolderOpen className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium text-primary">Saran Room</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {roomSuggestion.action === "create_new"
+                    ? `Buat room baru "${roomSuggestion.roomTitle}"? Salinan percakapan akan disimpan ke sana.`
+                    : `Simpan salinan ke room "${roomSuggestion.roomTitle}"?`}
+                  {roomSuggestion.reason && <span className="block mt-1 italic">{roomSuggestion.reason}</span>}
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="default" className="text-xs h-7" data-testid="button-approve-room"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/rooms/approve-move", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: roomSuggestion.action,
+                            roomId: roomSuggestion.roomId || null,
+                            roomTitle: roomSuggestion.roomTitle || "Obrolan Baru",
+                          }),
+                        });
+                        if (res.ok) {
+                          queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+                          toast({ title: roomSuggestion.action === "create_new" ? `Room "${roomSuggestion.roomTitle}" dibuat` : `Salinan disimpan ke "${roomSuggestion.roomTitle}"` });
+                        }
+                      } catch (_) {}
+                      setRoomSuggestion(null);
+                    }}>
+                    Ya, Simpan
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-xs h-7" data-testid="button-reject-room"
+                    onClick={() => setRoomSuggestion(null)}>
+                    Tidak
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isStreaming && pendingSecretaryCount > 0 && isOwner && (
+            <div className="flex justify-start pl-1 mt-2" data-testid="container-secretary-pending">
+              <div className="bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-lg p-3 max-w-sm">
+                <div className="flex items-center gap-2 mb-2">
+                  <ClipboardList className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Sekretaris mendeteksi {pendingSecretaryCount} item baru</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">Item perlu ditinjau sebelum disimpan ke database.</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="default" className="text-xs h-7 bg-amber-600 hover:bg-amber-700" data-testid="button-review-secretary"
+                    onClick={() => setShowSecretaryReview(true)}>
+                    Tinjau
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-xs h-7" data-testid="button-dismiss-secretary"
+                    onClick={() => setPendingSecretaryCount(0)}>
+                    Nanti
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </div>

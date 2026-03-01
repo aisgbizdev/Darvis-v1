@@ -44,20 +44,22 @@ DARVIS utilizes a modern web architecture.
 - **Decision Fast Mode**: Provides concise 3-bullet summaries.
 - **Streaming SSE responses**: Real-time response delivery.
 - **Secretary System (v2.0, Mirror Mode)**: Manages team members, meetings, action items, and projects.
-    - Includes `team_members` with aliases and categories, `meetings`, `action_items`, `projects`, `notifications`.
+    - Includes `team_members` with aliases and categories, `meetings`, `action_items`, `projects`, `notifications`, `secretary_pending`.
     - Features a seeded people database, alias resolution, auto-detection of new names, and GPT-powered extraction of secretary data from conversations.
+    - **Approval-Based Extraction (v2.1)**: Meetings, action items, and projects go to `secretary_pending` table first. User reviews and approves/rejects via inline SecretaryReview modal before saving to real tables. Team members still auto-save.
     - Dynamic context injection for secretary nodes (`NODE_TEAM`, `NODE_MEETING`, `NODE_PROJECTS`).
-    - Proactive notifications for meetings and deadlines, with aggressive cleanup for old notifications and overdue items.
+    - **Expired Items Notification (v2.1)**: Overdue items and past meetings trigger `expired_review` notifications. User decides Keep or Hapus — no auto-archive.
+    - Proactive notifications for meetings and deadlines.
     - All date/time operations use `Asia/Jakarta` (WIB).
     - Team Persona Profiling (v2.0): Extracts work style, communication style, etc., from conversations.
+    - Multi-select batch delete for meetings and action items.
 - **Conversation Rooms (v2.0, Owner-only)**: Organizes chat history by topic while maintaining global context.
     - `chat_rooms` table with API for management.
-    - "Lobby" for default free-chat, with smart auto-room management (v2.1: 3-min cooldown, time-limited move, numbered list protection).
+    - "Lobby" for default free-chat, with **approval-based room suggestion** (v2.1): system suggests room, user approves, messages are COPIED (not moved) to room. Lobby stays intact.
     - Supports room merging.
     - Key design: global shared preferences and secretary data across all rooms.
     - Smart Room Context: injects relevant history or summary when entering a room.
     - Secretary Knowledge Injection (v2.1): All secretary data feeds DARVIS context with mandatory usage instruction.
-    - Action items archived (not deleted) after 3 days overdue. Archived section in dashboard with restore.
     - Project editing: progress slider, status dropdown, milestones, deadline, description, notes.
     - Fuzzy deduplication for action items. Stricter extraction rules (only explicit requests/delegations).
 
